@@ -1,0 +1,22 @@
+{
+  "agent": {
+    "api": "chat_completions",
+    "base_url": "https://your-agent-service.example/v1",
+    "model": "YOUR_CODING_MODEL",
+    "api_key_env": "SWE_PERSONA_AGENT_API_KEY",
+    "strict_json_schema": true,
+    "timeout_sec": 120,
+    "structured_output_mode": "json_schema",
+    "max_tokens_field": "max_completion_tokens"
+  },
+  "user_simulator": {
+    "api": "chat_completions",
+    "base_url": "https://your-simulator-service.example/v1",
+    "model": "YOUR_SIMULATOR_MODEL",
+    "api_key_env": "SWE_PERSONA_SIMULATOR_API_KEY",
+    "strict_json_schema": true,
+    "timeout_sec": 120,
+    "structured_output_mode": "json_schema",
+    "max_tokens_field": "max_completion_tokens"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "repository": "https://github.com/harbor-framework/harbor",
+  "commit": "31668af15560fb50a9d0584816d12726036656cf",
+  "license": "Apache-2.0",
+  "files": {
+    "terminus_json_plain_parser.py": {
+      "upstream_path": "src/harbor/agents/terminus_2/terminus_json_plain_parser.py",
+      "sha256": "ba7eeaeb28e2f72ecdc5850617c77cc571692c68698306637cc2cfed41130688"
+    },
+    "LICENSE": {
+      "upstream_path": "LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    }
+  }
+}

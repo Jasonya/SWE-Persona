@@ -1,0 +1,10 @@
+{
+  "id": "skeptic01",
+  "name": "Marcus Reyes",
+  "role": "Senior Systems Engineer",
+  "years_experience": 12,
+  "skills": ["refactoring", "debugging"],
+  "ai_trust": "skeptical",
+  "testing_preference": "strict-tdd",
+  "coding_style": "verbose-explicit (heavy typing)"
+}

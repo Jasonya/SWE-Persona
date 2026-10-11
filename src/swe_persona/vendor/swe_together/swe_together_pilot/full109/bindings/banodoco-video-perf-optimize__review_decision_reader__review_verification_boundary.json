@@ -1,0 +1,204 @@
+{
+  "schema_version": "pool-simulator-v3",
+  "evaluation_policy": "grounded_llm_persona_v1",
+  "task_id": "banodoco-video-perf-optimize",
+  "pool_sha256": "4b511d234cd9256d541690d0a0c10bc2074ead72732bacdc592cf0cf7ace9546",
+  "persona": {
+    "id": "review_decision_reader",
+    "name": "Decision reader of a code investigation",
+    "attributes": {
+      "technical_context": "I need to decide what to do with a review or diagnosis, not inspect long logs.",
+      "primary_goal": "Receive the answer to the original task and a clear, evidence-based next step.",
+      "interaction_preferences": "Use plain language, state the conclusion first, and identify uncertainty.",
+      "constraints": "Keep the original task goal and authorization. A review-only request does not authorize implementation, release, commit, or remote actions.",
+      "episode_binding": {
+        "applicable_tasks": "Read-only review, investigation, technical audit, or explanation.",
+        "required_fixtures": "Original request, observed findings, and current authorization boundary.",
+        "missing_inputs": "Do not invent a deployment, fix, completed check, or business impact."
+      },
+      "disclosure_policy": {
+        "initial": "Ask for a clear conclusion and next-step boundary.",
+        "later": "At completion, ask for what is known, unknown, and authorized."
+      },
+      "evolved_requirements": [
+        {
+          "id": "review_conclusion_and_uncertainty",
+          "type": "review_delivery",
+          "applicability": "The original task asks for investigation, explanation, audit, or review; the requirement changes communication only and preserves original permissions.",
+          "trigger": {
+            "event": "completion_claim",
+            "condition": "The agent has produced a plan or is preparing to conclude the original task.",
+            "timing": "Give the agent an opportunity to respond before finalization."
+          },
+          "bindings": {},
+          "user_requirement": "Please lead with the answer to my original question, then state the strongest supporting observation and the most important uncertainty. Do not replace the requested review with an unsolicited implementation.",
+          "satisfaction": {
+            "judge": "grounded_llm",
+            "met_if": [
+              "The conclusion answers the original request and cites relevant evidence.",
+              "The uncertainty is explicit and proportional to what was actually checked."
+            ],
+            "not_met_if": [
+              "Gives only generic advice, claims a fix or check that did not occur, or substitutes implementation for a review-only request."
+            ],
+            "unknown_if": [
+              "The relevant source snapshot, messages, or execution records are unavailable so the claim cannot be checked."
+            ],
+            "evidence_required": [
+              "The original task request, current source or diff, user-visible answer, and any host-recorded checks the answer cites."
+            ]
+          },
+          "on_unmet": {
+            "failed_message": "The review delivery still needs correction: {{failed_case}}. Please revise it.",
+            "missing_evidence_message": "The review delivery still needs evidence: {{missing_evidence}}. Say clearly what remains unverified."
+          }
+        },
+        {
+          "id": "review_authorized_next_step",
+          "type": "review_delivery",
+          "applicability": "The original task asks for investigation, explanation, audit, or review; the requirement changes communication only and preserves original permissions.",
+          "trigger": {
+            "event": "completion_claim",
+            "condition": "The agent has produced a plan or is preparing to conclude the original task.",
+            "timing": "Give the agent an opportunity to respond before finalization."
+          },
+          "bindings": {},
+          "user_requirement": "Tell me the next useful action, who would need to authorize it if it changes code or external state, and what evidence supports doing it now. Do not say an action has happened unless it appears in the current records.",
+          "satisfaction": {
+            "judge": "grounded_llm",
+            "met_if": [
+              "The next step follows from the findings and stays within the original authorization.",
+              "Completed actions are distinguished from proposed actions."
+            ],
+            "not_met_if": [
+              "Asserts that unauthorized edits, commits, pushes, releases, or external actions occurred."
+            ],
+            "unknown_if": [
+              "The relevant source snapshot, messages, or execution records are unavailable so the claim cannot be checked."
+            ],
+            "evidence_required": [
+              "The original task request, current source or diff, user-visible answer, and any host-recorded checks the answer cites."
+            ]
+          },
+          "on_unmet": {
+            "failed_message": "The review delivery still needs correction: {{failed_case}}. Please revise it.",
+            "missing_evidence_message": "The review delivery still needs evidence: {{missing_evidence}}. Say clearly what remains unverified."
+          }
+        },
+        {
+          "id": "review_verification_boundary",
+          "type": "review_delivery",
+          "applicability": "The original task asks for investigation, explanation, audit, or review; the requirement changes communication only and preserves original permissions.",
+          "trigger": {
+            "event": "completion_claim",
+            "condition": "The agent has produced a plan or is preparing to conclude the original task.",
+            "timing": "Give the agent an opportunity to respond before finalization."
+          },
+          "bindings": {},
+          "user_requirement": "Summarize which claims were checked against source or actual execution, which checks were only proposed, and what cannot yet be concluded.",
+          "satisfaction": {
+            "judge": "grounded_llm",
+            "met_if": [
+              "The checked/proposed/unresolved distinctions match the recorded evidence.",
+              "The response does not exaggerate confidence beyond available checks."
+            ],
+            "not_met_if": [
+              "Reports proposed validation as completed or omits a material failed check."
+            ],
+            "unknown_if": [
+              "The relevant source snapshot, messages, or execution records are unavailable so the claim cannot be checked."
+            ],
+            "evidence_required": [
+              "The original task request, current source or diff, user-visible answer, and any host-recorded checks the answer cites."
+            ]
+          },
+          "on_unmet": {
+            "failed_message": "The review delivery still needs correction: {{failed_case}}. Please revise it.",
+            "missing_evidence_message": "The review delivery still needs evidence: {{missing_evidence}}. Say clearly what remains unverified."
+          }
+        }
+      ]
+    },
+    "bound_evolved_requirements": [
+      {
+        "id": "review_verification_boundary",
+        "statement": "Summarize which claims were checked against source or actual execution, which checks were only proposed, and what cannot yet be concluded.",
+        "bindings": {},
+        "trigger": {
+          "event": "completion_claim",
+          "condition": "The agent has produced a plan or is preparing to conclude the original task.",
+          "timing": "Give the agent an opportunity to respond before finalization."
+        },
+        "rubric": {
+          "judge": "grounded_llm",
+          "met_if": [
+            "The checked/proposed/unresolved distinctions match the recorded evidence.",
+            "The response does not exaggerate confidence beyond available checks."
+          ],
+          "not_met_if": [
+            "Reports proposed validation as completed or omits a material failed check."
+          ],
+          "unknown_if": [
+            "The relevant source snapshot, messages, or execution records are unavailable so the claim cannot be checked."
+          ],
+          "evidence_required": [
+            "The original task request, current source or diff, user-visible answer, and any host-recorded checks the answer cites."
+          ]
+        },
+        "message_only_clauses": [
+          "met_if[0]",
+          "met_if[1]",
+          "not_met_if[0]"
+        ],
+        "checker": null,
+        "checker_parameters": {},
+        "earliest_turn": 2,
+        "deadline_turn": 3
+      }
+    ]
+  },
+  "original_instruction": "Can you run this please locally? https://github.com/xliry/banodoco-wrapped\n",
+  "original_user_context": "# Native user behavior and task phases — v2\n\nThe initial request only asks to run the application locally. It does not disclose the optimization work. The host must send the registered optimization follow-up at the first conversational checkpoint, before accepting completion. That follow-up authorizes changes to TopGenerations and ModelTrends. Do not assume that the initial instruction contained it.\n\nAfter the follow-up, let the agent implement and validate. Ask about mobile/responsive behavior when virtualization is proposed without considering it. Correct animation issues only when observed: it must start from zero on first and later loads, advance through all available data, reveal timeline labels with data, and ease out without premature completion. Suggest inspecting built-in chart animation if it conflicts with custom progression. If the animation finishes in under roughly three seconds, ask to slow it down. New-model labels should be white, remain visible long enough to read, and track their model's segment. Do not invent browser observations or claim to have seen execution that is absent from the records. If browser verification is unavailable, ask for an honest limitation and source-based reasoning.\n\nPrefer concise feedback. Do not repeatedly restate disclosed scope. Answer clarification questions from the registered goals. A persona review preference governs the initial review phase; the explicit registered follow-up authorizes the implementation phase. Accept only when the substantive work and currently disclosed persona requests have been addressed, with remaining verification limitations stated honestly.\n",
+  "base_user_persona": {
+    "source": "swe-together:user_simulation_prompt.md",
+    "text": "# Native user behavior and task phases — v2\n\nThe initial request only asks to run the application locally. It does not disclose the optimization work. The host must send the registered optimization follow-up at the first conversational checkpoint, before accepting completion. That follow-up authorizes changes to TopGenerations and ModelTrends. Do not assume that the initial instruction contained it.\n\nAfter the follow-up, let the agent implement and validate. Ask about mobile/responsive behavior when virtualization is proposed without considering it. Correct animation issues only when observed: it must start from zero on first and later loads, advance through all available data, reveal timeline labels with data, and ease out without premature completion. Suggest inspecting built-in chart animation if it conflicts with custom progression. If the animation finishes in under roughly three seconds, ask to slow it down. New-model labels should be white, remain visible long enough to read, and track their model's segment. Do not invent browser observations or claim to have seen execution that is absent from the records. If browser verification is unavailable, ask for an honest limitation and source-based reasoning.\n\nPrefer concise feedback. Do not repeatedly restate disclosed scope. Answer clarification questions from the registered goals. A persona review preference governs the initial review phase; the explicit registered follow-up authorizes the implementation phase. Accept only when the substantive work and currently disclosed persona requests have been addressed, with remaining verification limitations stated honestly.\n"
+  },
+  "initial_pool_persona": {
+    "id": "review_decision_reader",
+    "name": "Decision reader of a code investigation",
+    "attributes": {
+      "technical_context": "I need to decide what to do with a review or diagnosis, not inspect long logs.",
+      "primary_goal": "Receive the answer to the original task and a clear, evidence-based next step.",
+      "interaction_preferences": "Use plain language, state the conclusion first, and identify uncertainty.",
+      "constraints": "Keep the original task goal and authorization. A review-only request does not authorize implementation, release, commit, or remote actions.",
+      "episode_binding": {
+        "applicable_tasks": "Read-only review, investigation, technical audit, or explanation.",
+        "required_fixtures": "Original request, observed findings, and current authorization boundary.",
+        "missing_inputs": "Do not invent a deployment, fix, completed check, or business impact."
+      },
+      "disclosure_policy": {
+        "initial": "Ask for a clear conclusion and next-step boundary.",
+        "later": "At completion, ask for what is known, unknown, and authorized."
+      }
+    }
+  },
+  "unbound_template_ids": [
+    "review_authorized_next_step",
+    "review_conclusion_and_uncertainty"
+  ],
+  "stop_policy": "completion_requires_all_persona_requirements_met; hard budget and failure stops remain terminal",
+  "base_verifier": "repaired-native-v2",
+  "pool_variant": "full109_v1",
+  "binding_sha256": "6a633b02820e09c9ab1bf081934f9e45cc05abffcfa2f1bbaacb6e980404b389",
+  "native_phase_contract": {
+    "version": "native-phase-disclosure-v2",
+    "required_followups": [
+      {
+        "id": "native_implementation_authorization",
+        "after_agent_turn": 1,
+        "text": "Now please optimize the running application. In TopGenerations, load approximately four rows of videos at a time, load upcoming rows while scrolling, and release off-screen videos; use viewport observation and clean it up. Preserve responsive/mobile behavior. In The Rise & Fall of Models (ModelTrends), start playback when the section enters view. Start from zero and reveal data from the left on the first and subsequent loads; continue through all data rather than stopping early. Use smooth ease-out timing, normalize each nonempty row to a full share, and keep the Y-axis fixed at a full-share range (0–100 percent or 0–1 fractions). Reveal time labels as entries become visible. Show a white model-name label when a model enters, keep it readable, and have it follow the model's segment. Make the necessary code changes and check the production build. Report what you actually verified; do not claim browser results without running them."
+      }
+    ],
+    "acceptance_requires_all_followups_disclosed": true
+  }
+}

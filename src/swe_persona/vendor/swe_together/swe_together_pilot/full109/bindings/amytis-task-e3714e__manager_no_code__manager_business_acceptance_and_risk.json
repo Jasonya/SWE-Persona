@@ -1,0 +1,209 @@
+{
+  "schema_version": "pool-simulator-v3",
+  "evaluation_policy": "grounded_llm_persona_v1",
+  "task_id": "amytis-task-e3714e",
+  "pool_sha256": "4b511d234cd9256d541690d0a0c10bc2074ead72732bacdc592cf0cf7ace9546",
+  "persona": {
+    "id": "manager_no_code",
+    "name": "Manager who wants conclusions only, not code",
+    "attributes": {
+      "technical_context": "Can assess business inputs, user-visible results, release risks, and responsibility for next steps, but does not want to read implementation details. The level of technical understanding is not a reason to waive actual fixes or verification.",
+      "primary_goal": "Obtain an actual fix and concise conclusions usable for decision-making, and know whether delivery is currently possible, what changes users can see, and who still needs to do what.",
+      "interaction_preferences": "Explicitly requires messages addressed to the manager to contain no code, SQL, commands, or long logs; use short sentences and business terminology. The agent may make changes and perform verification in the background within the authorized scope.",
+      "constraints": "Must not release, migrate data, or commit to actions by external teams without authorization. \"No code\" only restricts the form of delivery to the manager and does not cancel the original functional task; critical failures and uncertainties must be retained.",
+      "episode_binding": {
+        "applicable_tasks": "The behavior in the actual issue can be mapped to user-observable inputs and outputs, and an evidence-based delivery recommendation can be provided.",
+        "required_fixtures": "The public issue, the mapping between business terminology and actual interfaces, acceptance scenarios, and authorization boundaries; the third template additionally requires a preregistered event involving a change in results or conditions that actually occurred.",
+        "missing_inputs": "The pair is not applicable when an evidence-based mapping of business behavior cannot be established; if no change event exists, the third template is skip. Do not fabricate release incidents or business losses."
+      },
+      "disclosure_policy": {
+        "initial": "Explicitly requests conclusions only, with no code, SQL, or commands, while still requiring completion of the fix and verification.",
+        "later": "Agree on concise decision-oriented delivery after the first proposal, and require a business acceptance mapping after the first completion claim; require updated recommendations only after an actual bound change occurs, without retroactively invalidating conclusions that were reasonable under the original conditions."
+      },
+      "evolved_requirements": [
+        {
+          "id": "manager_conclusion_only_delivery",
+          "type": "decision_summary",
+          "applicability": "The agent already has an explainable approach and can distinguish between recommended, executed, and pending-verification states.",
+          "trigger": {
+            "event": "first_plan",
+            "condition": "The agent first proposes an approach to the solution.",
+            "timing": "Specify the format of subsequent manager-facing deliverables in the next turn."
+          },
+          "bindings": {},
+          "user_requirement": "Please limit subsequent replies to at most three points: what you recommend doing, how far the work has progressed, and what you still need me to decide. Do not give me code, SQL, commands, or long logs; you must still fix the original problem and verify it in the background, and must not provide recommendations only.",
+          "satisfaction": {
+            "judge": "grounded_llm",
+            "met_if": [
+              "After activation, each manager-facing reply contains no more than three points, covering recommendations, status, and required decisions; when no decision is needed, explicitly state that no decision is needed.",
+              "No implementation code, SQL, executable commands, or long logs appear, and the reported degree of completion is consistent with evidence that can be cited."
+            ],
+            "not_met_if": [
+              "Presents verbatim technical operations as user steps, omits actual blockers, or describes background work that has not yet been executed as complete."
+            ],
+            "unknown_if": [
+              "The artifacts on which the status depends cannot be checked, making it impossible to determine whether the summary is truthful."
+            ],
+            "evidence_required": [
+              "User-visible messages after activation and the actual work status they reference; background tool calls are recorded separately."
+            ]
+          },
+          "on_unmet": {
+            "failed_message": "This conclusion is not yet directly usable: {{failed_case}}. Please keep it within three points, discuss status and decisions, and do not paste implementation details.",
+            "missing_evidence_message": "This status is not yet supported: {{missing_evidence}}. Please verify it first, or explicitly state that it has not yet been confirmed."
+          }
+        },
+        {
+          "id": "manager_business_acceptance_and_risk",
+          "type": "decision_summary",
+          "applicability": "The fixture provides a mapping from this task's actual interfaces to business behavior, along with observable acceptance scenarios.",
+          "trigger": {
+            "event": "completion_claim",
+            "condition": "The agent first claims that the functional fix or verification is complete.",
+            "timing": "The next turn before decision-oriented delivery."
+          },
+          "bindings": {
+            "business_cases": "The specific user actions/inputs, expected visible outputs, and acceptance scope mapped from the public issue and fixture.",
+            "risk_boundary": "Uncovered behaviors, release prerequisites, and external dependencies supported by the original contract, execution results, and permissions fixture."
+          },
+          "user_requirement": "Also give me conclusions I can use for acceptance: for {{business_cases}}, clarify what users do, what they should now see, and what has actually been checked. Then explain how {{risk_boundary}} affects delivery; still use no more than three points, and provide no technical operations.",
+          "satisfaction": {
+            "judge": "hybrid",
+            "met_if": [
+              "The summary corresponds individually to the inputs, outputs, and actual verification status of the bound business scenarios, without adding fabricated business objectives.",
+              "Risks and recommendations are based on current evidence and comply with the activated brevity and no-code requirements."
+            ],
+            "not_met_if": [
+              "Business results contradict actual outputs, uncovered scenarios are described as having passed acceptance, or known failures affecting delivery are omitted."
+            ],
+            "unknown_if": [
+              "The business mapping or execution evidence for scenarios claimed to have been checked is missing."
+            ],
+            "evidence_required": [
+              "Business summary messages, mapping sources, corresponding execution results, and the basis for risks."
+            ]
+          },
+          "on_unmet": {
+            "failed_message": "The acceptance conclusion I care about is incorrect: {{failed_case}}. Please revise it to reflect actual user inputs and visible results.",
+            "missing_evidence_message": "Still missing {{missing_evidence}}. Please clearly mark whether the relevant scenarios have been checked or are pending checks."
+          }
+        },
+        {
+          "id": "manager_update_after_observed_change",
+          "type": "decision_summary",
+          "applicability": "A registered change in verification results, candidate solutions, or authorization conditions has actually occurred, and a previous recommendation is available for comparison.",
+          "trigger": {
+            "event": "registered_change_observed",
+            "condition": "The harness records the specified change event, and its contents can be disclosed to the user.",
+            "timing": "The next turn after the event, before the decision deadline."
+          },
+          "bindings": {
+            "observed_change": "The actual change, its time of occurrence, and affected entities in the event fixture and trusted records.",
+            "previous_recommendation": "The previous recommendation message visible to the manager and its premises.",
+            "decision_options": "Options to continue, revise, or defer permitted by the permissions fixture and existing evidence, excluding unauthorized releases."
+          },
+          "user_requirement": "Now {{observed_change}} has occurred. Please update your previous {{previous_recommendation}}: whether the conclusion changes, what the basis is, and what I should choose next from {{decision_options}}. Still limit it to three points; do not reuse conclusions that are no longer valid.",
+          "satisfaction": {
+            "judge": "grounded_llm",
+            "met_if": [
+              "Explicitly identify changes to the premises and conclusions, or the reasons they remain unchanged, cite actual new evidence, and retain the portions that have not yet been verified.",
+              "Provide next steps within the authorized scope and matters requiring user decisions, with no code or unsupported business commitments."
+            ],
+            "not_met_if": [
+              "Ignores changes that have occurred, continues to cite invalid results, or recommends operations beyond authorization and falsely claims they have been executed."
+            ],
+            "unknown_if": [
+              "The new event or previous recommendation cannot be checked."
+            ],
+            "evidence_required": [
+              "Recommendation messages before and after the change, event references, the current evidence snapshot, and authorized options."
+            ]
+          },
+          "on_unmet": {
+            "failed_message": "The new circumstances are not yet reflected in the decision: {{failed_case}}. Please update this recommendation.",
+            "missing_evidence_message": "Updating the recommendation still requires {{missing_evidence}}. First state which conclusions cannot be determined for now."
+          }
+        }
+      ]
+    },
+    "bound_evolved_requirements": [
+      {
+        "id": "manager_business_acceptance_and_risk",
+        "statement": "Also give me conclusions I can use for acceptance: for user-observable inputs and outputs in the frozen task request, clarify what users do, what they should now see, and what has actually been checked. Then explain how do not claim behavior outside the changed path or validation evidence affects delivery; still use no more than three points, and provide no technical operations.",
+        "bindings": {
+          "business_cases": {
+            "source_kind": "public_task",
+            "source_ref": "instruction.md",
+            "text": "user-observable inputs and outputs in the frozen task request"
+          },
+          "risk_boundary": {
+            "source_kind": "public_task",
+            "source_ref": "instruction.md",
+            "text": "do not claim behavior outside the changed path or validation evidence"
+          }
+        },
+        "trigger": {
+          "event": "completion_claim",
+          "condition": "The agent first claims that the functional fix or verification is complete.",
+          "timing": "The next turn before decision-oriented delivery."
+        },
+        "rubric": {
+          "judge": "hybrid",
+          "met_if": [
+            "The summary corresponds individually to the inputs, outputs, and actual verification status of the bound business scenarios, without adding fabricated business objectives.",
+            "Risks and recommendations are based on current evidence and comply with the activated brevity and no-code requirements."
+          ],
+          "not_met_if": [
+            "Business results contradict actual outputs, uncovered scenarios are described as having passed acceptance, or known failures affecting delivery are omitted."
+          ],
+          "unknown_if": [
+            "The business mapping or execution evidence for scenarios claimed to have been checked is missing."
+          ],
+          "evidence_required": [
+            "Business summary messages, mapping sources, corresponding execution results, and the basis for risks."
+          ]
+        },
+        "message_only_clauses": [
+          "met_if[0]"
+        ],
+        "checker": null,
+        "checker_parameters": {},
+        "earliest_turn": 2,
+        "deadline_turn": 3
+      }
+    ]
+  },
+  "original_instruction": "There is a bug in the series URL: if 'customPaths' is empty, the 'autoPaths: true' configuration doesn't seem to work.\n",
+  "original_user_context": "# User Simulation Prompt: amytis-task-e3714e\n\n## Simulator Calibration\n\n- **Total real user messages**: 18 across ~400 total messages (~50% tool-result messages)\n- **Longest silence**: 42 agent turns between Turn 11 and Turn 12 (session ran out of context and was continued)\n- **Communication pattern**: The user reports issues, gives directional guidance, and delegates implementation. Brief check-ins (\"what is your opinion?\", \"OK, fix it\") are common. The user does not prescribe specific code changes.\n- **Target message count**: ~3-5 user messages for a competent agent. The user silently accepts good work — silence is the default response.\n- **Default behavior**: SILENCE. Do not intervene unless the agent asks a direct question, goes in a clearly wrong direction, or reports completion/errors.\n\n## User Turns\n\n### Turn 1 (after 0 agent turns)\n**Context**: Opening message — the user reports a bug discovered in their Next.js blog.\n\n**Said**: \"There is a bug in the series URL: if 'customPaths' is empty, the 'autoPaths: true' configuration doesn't seem to work.\"\n\n**Why**: The user has `autoPaths: true` configured in their site config but no `customPaths` entries. The autoPaths series routing doesn't kick in, despite the docs saying it should.\n\n### Turn 2 (after 40 agent turns)\n**Context**: The agent has already modified several files to add autoPaths support to series listing routes. The user encountered a new problem during testing.\n\n**Said**: \"If 'autoPaths' is set to true and we use the series path, the Chinese URL of the post breaks. The error states that the page is missing a parameter in generateStaticParams(), which is required for the 'output: export' config. Notably, Chinese URLs for posts in the /posts path work fine.\"\n\n**Why**: Chinese post slugs cause routing failures under autoPaths. The user is providing additional context about a secondary bug.\n\n### Turn 3 (after 9 agent turns)\n**Context**: The agent proposed an approach.\n\n**Said**: \"what is your opinion?\"\n\n**Why**: The user wants the agent's assessment of the situation before proceeding.\n\n### Turn 4 (after 1 agent turns)\n**Said**: \"OK, I just misunderstood.\"\n\n**Why**: The agent clarified the issue; user realizes their earlier assumption was wrong.\n\n### Turn 5 (after 6 agent turns)\n**Context**: Test failures after code changes.\n\n**Said**: \"bun test test failed: [test output showing posts/[slug] test failure]\"\n\n**Why**: The agent's changes broke existing tests. User is reporting the failure.\n\n### Turn 6 (after 12 agent turns)\n**Context**: Integration test failure.\n\n**Said**: \"test:int failed: bun test tests/integration [test output showing integration test failure]\"\n\n**Why**: Integration tests also failed. User is providing full error output.\n\n### Turn 7 (after 17 agent turns)\n**Context**: The agent has committed fixes and a PR exists. User references an external code review.\n\n**Said**: \"check about code reviews by coderabbit, PR #46\"\n\n**Why**: The user wants the agent to look at automated code review feedback on their PR.\n\n### Turn 8 (after 4 agent turns)\n**Said**: \"OK, fix it.\"\n\n**Why**: The agent summarized the review findings; user authorizes the fix.\n\n### Turn 9 (after 18 agent turns)\n**Said**: \"check about the new code review comments by coderabbit, PR #46\"\n\n**Why**: More review comments arrived. User wants the agent to check them.\n\n### Turn 10 (after 3 agent turns)\n**Said**: \"what is your opinion?\"\n\n**Why**: User wants the agent's assessment of whether the review feedback is valid.\n\n### Turn 11 (after 1 agent turns)\n**Said**: \"if test coverage is valuable, why not fix?\"\n\n**Why**: The agent acknowledged missing test coverage but didn't act. User pushes for action.\n\n### Turn 12 (after 42 agent turns)\n**Context**: Session continued from previous context. Longest silence.\n\n**Said**: \"continue\"\n\n**Why**: The session ran out of context; user signals to continue the work from the summary.\n\n### Turn 13 (after 19 agent turns)\n**Said**: \"check about the recent new code review comments by coderabbit, PR #46\"\n\n**Why**: More review iterations. User wants the agent to stay on top of them.\n\n### Turn 14 (after 2 agent turns)\n**Said**: \"what is your opinion?\"\n\n**Why**: User wants the agent's assessment.\n\n### Turn 15 (after 1 agent turns)\n**Said**: \"OK\"\n\n**Why**: User acknowledges the agent's response.\n\n### Turn 16 (after 16 agent turns)\n**Said**: \"check about the recent new code review comments by coderabbit, PR #46, why reivew more and more, and more critical?\"\n\n**Why**: User is frustrated by the volume and severity of review comments.\n\n### Turn 17 (after 2 agent turns)\n**Said**: \"if that are real bugs, and worth fix, I think we need take them seriously and fix them. What do you think?\"\n\n**Why**: User decides to engage with the feedback seriously. Wants the agent's opinion on which issues to fix.\n\n### Turn 18 (after 3 agent turns)\n**Said**: \"If there are conflicts, it is better to fail at build time than at runtime.\"\n\n**Why**: User adds a design principle to guide the fix — prefer build-time validation over runtime errors.\n\n## Overview\n\n| Field | Value |\n|-------|-------|\n| Total messages in session | 424 |\n| Real user messages | 18 |\n| Communication style | Hands-off, directive when needed |\n| User expertise | Experienced developer, understands Next.js and routing concepts |\n| User language | English (occasional typos: \"reivew\") |\n| Key trigger | Turn 1: Bug with autoPaths when customPaths is empty |\n| Agent behavior expected | Investigate, propose, implement, test |\n",
+  "base_user_persona": {
+    "source": "swe-together:user_simulation_prompt.md",
+    "text": "# User Simulation Prompt: amytis-task-e3714e\n\n## Simulator Calibration\n\n- **Total real user messages**: 18 across ~400 total messages (~50% tool-result messages)\n- **Longest silence**: 42 agent turns between Turn 11 and Turn 12 (session ran out of context and was continued)\n- **Communication pattern**: The user reports issues, gives directional guidance, and delegates implementation. Brief check-ins (\"what is your opinion?\", \"OK, fix it\") are common. The user does not prescribe specific code changes.\n- **Target message count**: ~3-5 user messages for a competent agent. The user silently accepts good work — silence is the default response.\n- **Default behavior**: SILENCE. Do not intervene unless the agent asks a direct question, goes in a clearly wrong direction, or reports completion/errors.\n\n## User Turns\n\n### Turn 1 (after 0 agent turns)\n**Context**: Opening message — the user reports a bug discovered in their Next.js blog.\n\n**Said**: \"There is a bug in the series URL: if 'customPaths' is empty, the 'autoPaths: true' configuration doesn't seem to work.\"\n\n**Why**: The user has `autoPaths: true` configured in their site config but no `customPaths` entries. The autoPaths series routing doesn't kick in, despite the docs saying it should.\n\n### Turn 2 (after 40 agent turns)\n**Context**: The agent has already modified several files to add autoPaths support to series listing routes. The user encountered a new problem during testing.\n\n**Said**: \"If 'autoPaths' is set to true and we use the series path, the Chinese URL of the post breaks. The error states that the page is missing a parameter in generateStaticParams(), which is required for the 'output: export' config. Notably, Chinese URLs for posts in the /posts path work fine.\"\n\n**Why**: Chinese post slugs cause routing failures under autoPaths. The user is providing additional context about a secondary bug.\n\n### Turn 3 (after 9 agent turns)\n**Context**: The agent proposed an approach.\n\n**Said**: \"what is your opinion?\"\n\n**Why**: The user wants the agent's assessment of the situation before proceeding.\n\n### Turn 4 (after 1 agent turns)\n**Said**: \"OK, I just misunderstood.\"\n\n**Why**: The agent clarified the issue; user realizes their earlier assumption was wrong.\n\n### Turn 5 (after 6 agent turns)\n**Context**: Test failures after code changes.\n\n**Said**: \"bun test test failed: [test output showing posts/[slug] test failure]\"\n\n**Why**: The agent's changes broke existing tests. User is reporting the failure.\n\n### Turn 6 (after 12 agent turns)\n**Context**: Integration test failure.\n\n**Said**: \"test:int failed: bun test tests/integration [test output showing integration test failure]\"\n\n**Why**: Integration tests also failed. User is providing full error output.\n\n### Turn 7 (after 17 agent turns)\n**Context**: The agent has committed fixes and a PR exists. User references an external code review.\n\n**Said**: \"check about code reviews by coderabbit, PR #46\"\n\n**Why**: The user wants the agent to look at automated code review feedback on their PR.\n\n### Turn 8 (after 4 agent turns)\n**Said**: \"OK, fix it.\"\n\n**Why**: The agent summarized the review findings; user authorizes the fix.\n\n### Turn 9 (after 18 agent turns)\n**Said**: \"check about the new code review comments by coderabbit, PR #46\"\n\n**Why**: More review comments arrived. User wants the agent to check them.\n\n### Turn 10 (after 3 agent turns)\n**Said**: \"what is your opinion?\"\n\n**Why**: User wants the agent's assessment of whether the review feedback is valid.\n\n### Turn 11 (after 1 agent turns)\n**Said**: \"if test coverage is valuable, why not fix?\"\n\n**Why**: The agent acknowledged missing test coverage but didn't act. User pushes for action.\n\n### Turn 12 (after 42 agent turns)\n**Context**: Session continued from previous context. Longest silence.\n\n**Said**: \"continue\"\n\n**Why**: The session ran out of context; user signals to continue the work from the summary.\n\n### Turn 13 (after 19 agent turns)\n**Said**: \"check about the recent new code review comments by coderabbit, PR #46\"\n\n**Why**: More review iterations. User wants the agent to stay on top of them.\n\n### Turn 14 (after 2 agent turns)\n**Said**: \"what is your opinion?\"\n\n**Why**: User wants the agent's assessment.\n\n### Turn 15 (after 1 agent turns)\n**Said**: \"OK\"\n\n**Why**: User acknowledges the agent's response.\n\n### Turn 16 (after 16 agent turns)\n**Said**: \"check about the recent new code review comments by coderabbit, PR #46, why reivew more and more, and more critical?\"\n\n**Why**: User is frustrated by the volume and severity of review comments.\n\n### Turn 17 (after 2 agent turns)\n**Said**: \"if that are real bugs, and worth fix, I think we need take them seriously and fix them. What do you think?\"\n\n**Why**: User decides to engage with the feedback seriously. Wants the agent's opinion on which issues to fix.\n\n### Turn 18 (after 3 agent turns)\n**Said**: \"If there are conflicts, it is better to fail at build time than at runtime.\"\n\n**Why**: User adds a design principle to guide the fix — prefer build-time validation over runtime errors.\n\n## Overview\n\n| Field | Value |\n|-------|-------|\n| Total messages in session | 424 |\n| Real user messages | 18 |\n| Communication style | Hands-off, directive when needed |\n| User expertise | Experienced developer, understands Next.js and routing concepts |\n| User language | English (occasional typos: \"reivew\") |\n| Key trigger | Turn 1: Bug with autoPaths when customPaths is empty |\n| Agent behavior expected | Investigate, propose, implement, test |\n"
+  },
+  "initial_pool_persona": {
+    "id": "manager_no_code",
+    "name": "Manager who wants conclusions only, not code",
+    "attributes": {
+      "technical_context": "Can assess business inputs, user-visible results, release risks, and responsibility for next steps, but does not want to read implementation details. The level of technical understanding is not a reason to waive actual fixes or verification.",
+      "primary_goal": "Obtain an actual fix and concise conclusions usable for decision-making, and know whether delivery is currently possible, what changes users can see, and who still needs to do what.",
+      "interaction_preferences": "Explicitly requires messages addressed to the manager to contain no code, SQL, commands, or long logs; use short sentences and business terminology. The agent may make changes and perform verification in the background within the authorized scope.",
+      "constraints": "Must not release, migrate data, or commit to actions by external teams without authorization. \"No code\" only restricts the form of delivery to the manager and does not cancel the original functional task; critical failures and uncertainties must be retained.",
+      "episode_binding": {
+        "applicable_tasks": "The behavior in the actual issue can be mapped to user-observable inputs and outputs, and an evidence-based delivery recommendation can be provided.",
+        "required_fixtures": "The public issue, the mapping between business terminology and actual interfaces, acceptance scenarios, and authorization boundaries; the third template additionally requires a preregistered event involving a change in results or conditions that actually occurred.",
+        "missing_inputs": "The pair is not applicable when an evidence-based mapping of business behavior cannot be established; if no change event exists, the third template is skip. Do not fabricate release incidents or business losses."
+      },
+      "disclosure_policy": {
+        "initial": "Explicitly requests conclusions only, with no code, SQL, or commands, while still requiring completion of the fix and verification.",
+        "later": "Agree on concise decision-oriented delivery after the first proposal, and require a business acceptance mapping after the first completion claim; require updated recommendations only after an actual bound change occurs, without retroactively invalidating conclusions that were reasonable under the original conditions."
+      }
+    }
+  },
+  "unbound_template_ids": [
+    "manager_conclusion_only_delivery",
+    "manager_update_after_observed_change"
+  ],
+  "stop_policy": "completion_requires_all_persona_requirements_met; hard budget and failure stops remain terminal",
+  "base_verifier": "repaired-native-v2",
+  "pool_variant": "full109_v1",
+  "binding_sha256": "fa9b41db938d23749b20ec4a08ac51860ee8c6519e64176e8b477bb551d0bbd2"
+}

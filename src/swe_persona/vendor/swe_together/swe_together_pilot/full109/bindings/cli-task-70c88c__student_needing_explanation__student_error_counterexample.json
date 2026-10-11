@@ -1,0 +1,214 @@
+{
+  "schema_version": "pool-simulator-v3",
+  "evaluation_policy": "grounded_llm_persona_v1",
+  "task_id": "cli-task-70c88c",
+  "pool_sha256": "4b511d234cd9256d541690d0a0c10bc2074ead72732bacdc592cf0cf7ace9546",
+  "persona": {
+    "id": "student_needing_explanation",
+    "name": "Student requiring explanations",
+    "attributes": {
+      "technical_context": "Can read the basic control flow and interfaces relevant to this task, but needs help connecting erroneous inputs, state changes, and the patch. Do not infer grade level, course language, or specific knowledge gaps from the role.",
+      "primary_goal": "Complete the original repair while also obtaining explanations and self-check materials that can be verified against this task's code and examples; passing code tests must not substitute for delivering explanations.",
+      "interaction_preferences": "Explicitly prefers an explanation of the error first, followed by an explanation of the patch, using one small, verifiable example at a time. Learning constraints are explicitly stated by the student and recorded; do not infer from wording whether the student has understood.",
+      "constraints": "After public activation, comply with the binding implementation and learning constraints, such as using only permitted dependencies, preserving specified interfaces, or using restricted solution methods; the constraints must be compatible with the original task. The student's internal level of understanding must not be used as a success condition.",
+      "episode_binding": {
+        "applicable_tasks": "An issue with an explainable error path and valid boundary cases, for which the original repair can be completed within the learning constraints.",
+        "required_fixtures": "Disclose the error scenario, old code, and current patch snapshot; the learning template requires preregistered compatible constraints and sources of verifiable examples.",
+        "missing_inputs": "Skip the third template when there are no learning constraints; do not invent course rules on the fly. The pair is not applicable when disclosable error materials for this task cannot be provided."
+      },
+      "disclosure_policy": {
+        "initial": "Make clear that explanations are required deliverables, not an optional style choice; state the preference to see the error path first, and avoid lengthy, unsolicited tutorials.",
+        "later": "Request a counterexample after the first proposal, request correctness and boundary walkthroughs after the first patch, and disclose the specific, already binding learning constraints and self-check material requirements after the implementation is shown. New constraints apply only to subsequent deliverables and revisions, without retroactively penalizing earlier proposals."
+      },
+      "evolved_requirements": [
+        {
+          "id": "student_error_counterexample",
+          "type": "explanation",
+          "applicability": "There is an actual error case that can be disclosed and traced through the old code.",
+          "trigger": {
+            "event": "first_plan",
+            "condition": "The agent has proposed a repair direction but has not yet provided a step-by-step counterexample explanation for this task.",
+            "timing": "In the next round, supply the explanation first, then continue with the proposal or implementation."
+          },
+          "bindings": {
+            "counterexample": "Specific input, expected result, and old behavior from a public issue, test, or fixture.",
+            "old_path": "The actual entry point, key branches, and state locations traversed by that input in the baseline snapshot."
+          },
+          "user_requirement": "Do not just tell me which line to change yet. I am adding a deliverable requirement: use {{counterexample}} to follow {{old_path}} to the error, list the key intermediate values, and explain where the first deviation from the expected behavior occurs and why this is not a valid result.",
+          "satisfaction": {
+            "judge": "grounded_llm",
+            "met_if": [
+              "The input, key states, erroneous branch, and differences from expected behavior all match the old snapshot and the contract.",
+              "The explanation clearly distinguishes expected rules from actual execution and does not replace a walkthrough of this task with generic analogies."
+            ],
+            "not_met_if": [
+              "Intermediate values are impossible, the erroneous branch is incorrectly located, or the explanation does not state why the specific counterexample violates the contract."
+            ],
+            "unknown_if": [
+              "The old snapshot or case source is missing, so the walkthrough cannot be verified."
+            ],
+            "evidence_required": [
+              "Explanation messages, old-path anchors, and the counterexample source; execution conclusions must correspond to evidence from actual execution."
+            ]
+          },
+          "on_unmet": {
+            "failed_message": "I am stuck at this specific step: {{failed_case}}. Please walk through it again from the preceding state to this point.",
+            "missing_evidence_message": "I still cannot compare this against the code; {{missing_evidence}} is missing. Please supply it before continuing the explanation."
+          }
+        },
+        {
+          "id": "student_patch_and_boundary_reasoning",
+          "type": "explanation",
+          "applicability": "A candidate patch exists, and there are valid boundary cases related to its branches or invariants.",
+          "trigger": {
+            "event": "first_patch",
+            "condition": "The agent has provided the current patch and the relevant modification locations.",
+            "timing": "The patch explanation round; passing tests does not automatically substitute for it."
+          },
+          "bindings": {
+            "patch_anchor": "The actual symbols and changes that fix the error in the current patch snapshot.",
+            "boundary_case": "Specific valid boundary inputs and expected behavior from the public contract or fixture.",
+            "preserved_rule": "Behaviors or invariants in the original interface contract that this modification must preserve."
+          },
+          "user_requirement": "Now explain correctness: how does {{patch_anchor}} block the error just discussed while preserving {{preserved_rule}}? Please manually walk through {{boundary_case}}, identify the differences between the new and old branches, and explain why this is not hardcoded for just one test.",
+          "satisfaction": {
+            "judge": "grounded_llm",
+            "met_if": [
+              "The repair mechanism matches the current code, explaining the causal link being repaired and the behavior that still needs to be preserved.",
+              "The boundary-case walkthrough gives the correct path and output, without treating a finite set of cases as an unconditional, complete proof."
+            ],
+            "not_met_if": [
+              "The explanation describes an old patch, the boundary walkthrough is incorrect, or \"the tests are green\" substitutes for an explanation of the mechanism."
+            ],
+            "unknown_if": [
+              "The current patch or the expected boundary behavior is unavailable."
+            ],
+            "evidence_required": [
+              "Patch explanation messages, the current diff, boundary cases, and contract references."
+            ]
+          },
+          "on_unmet": {
+            "failed_message": "There is still a mismatch in this correctness explanation: {{failed_case}}. Please walk through this boundary again using the current patch.",
+            "missing_evidence_message": "With {{missing_evidence}} still missing, I cannot verify the branch changes you described."
+          }
+        },
+        {
+          "id": "student_learning_constraints_and_check",
+          "type": "execution_constraint",
+          "applicability": "The fixture has preregistered specific implementation constraints compatible with the original task, and there are materials from this task that can be used to create self-check questions.",
+          "trigger": {
+            "event": "patch_explanation_delivered",
+            "condition": "The agent has provided a patch explanation, and budget remains for revision and verification.",
+            "timing": "State the requirements explicitly before proceeding to finalization; request revisions to the existing candidate solution if necessary."
+          },
+          "bindings": {
+            "learning_limits": "Verifiable constraints that were preregistered and are explicitly stated by the simulator in this round, parsed into permitted/prohibited constructs, dependencies, interfaces, or modification scopes.",
+            "check_material": "A fixture containing this task's already disclosed inputs and valid variants, including verifiable expected results and supporting code."
+          },
+          "user_requirement": "Let me also make the constraints for this exercise explicit: the final implementation must satisfy {{learning_limits}}; please adjust the current proposal if it does not comply. Also use {{check_material}} to give me one result-prediction question and one error-location question, listing the questions first and the reference answers and corresponding supporting code afterward.",
+          "satisfaction": {
+            "judge": "hybrid",
+            "met_if": [
+              "The final implementation complies with each binding constraint and remains subject to the original functional acceptance checks.",
+              "Deliver both types of verifiable questions, separate answers, and supporting current code; the answers match the actual semantics."
+            ],
+            "not_met_if": [
+              "The implementation violates explicit constraints, or the self-check questions have incorrect answers, are unrelated to this task, or lack a required question type."
+            ],
+            "unknown_if": [
+              "A checker required for the constraints is unavailable, or the questions lack a basis for determining expected answers."
+            ],
+            "evidence_required": [
+              "Constraint declarations, final code and required check results, self-check question and answer messages, and their sources."
+            ]
+          },
+          "on_unmet": {
+            "failed_message": "This still does not meet my exercise requirements: {{failed_case}}. Please revise the corresponding implementation or that question; there is no need to guess whether I understand.",
+            "missing_evidence_message": "I still cannot verify the answers myself; {{missing_evidence}} is missing. Please provide all the supporting evidence."
+          }
+        }
+      ]
+    },
+    "bound_evolved_requirements": [
+      {
+        "id": "student_error_counterexample",
+        "statement": "Do not just tell me which line to change yet. I am adding a deliverable requirement: use the concrete failing or surprising input, observed behavior, and expected behavior described in the original request for cli-task-70c88c; distinguish any missing detail to follow the actual pre-change entry point and branches that handle that input; cite source locations to the error, list the key intermediate values, and explain where the first deviation from the expected behavior occurs and why this is not a valid result.",
+        "bindings": {
+          "counterexample": {
+            "source_kind": "public_task",
+            "source_ref": "instruction.md",
+            "text": "the concrete failing or surprising input, observed behavior, and expected behavior described in the original request for cli-task-70c88c; distinguish any missing detail"
+          },
+          "old_path": {
+            "source_kind": "public_repository",
+            "source_ref": "baseline repository snapshot",
+            "text": "the actual pre-change entry point and branches that handle that input; cite source locations"
+          }
+        },
+        "trigger": {
+          "event": "first_plan",
+          "condition": "The agent has proposed a repair direction but has not yet provided a step-by-step counterexample explanation for this task.",
+          "timing": "In the next round, supply the explanation first, then continue with the proposal or implementation."
+        },
+        "rubric": {
+          "judge": "grounded_llm",
+          "met_if": [
+            "The input, key states, erroneous branch, and differences from expected behavior all match the old snapshot and the contract.",
+            "The explanation clearly distinguishes expected rules from actual execution and does not replace a walkthrough of this task with generic analogies."
+          ],
+          "not_met_if": [
+            "Intermediate values are impossible, the erroneous branch is incorrectly located, or the explanation does not state why the specific counterexample violates the contract."
+          ],
+          "unknown_if": [
+            "The old snapshot or case source is missing, so the walkthrough cannot be verified."
+          ],
+          "evidence_required": [
+            "Explanation messages, old-path anchors, and the counterexample source; execution conclusions must correspond to evidence from actual execution."
+          ]
+        },
+        "message_only_clauses": [
+          "met_if[0]",
+          "met_if[1]",
+          "not_met_if[0]"
+        ],
+        "checker": null,
+        "checker_parameters": {},
+        "earliest_turn": 2,
+        "deadline_turn": 3
+      }
+    ]
+  },
+  "original_instruction": "need a little patch for `entire explain` that prints the help text if a parameter is passed without any qualifier flags\n",
+  "original_user_context": "# User Simulator Prompt\n\n## Simulator Calibration\n\n- **Total genuine user messages**: 3 (out of 21 total user turns; rest are tool_result pass-throughs)\n- **Longest silence**: ~5 minutes of agent activity between the branch-creation directive and the follow-up \"do the hint\" message\n- **Communication pattern**: Terse, directive. Intervenes only to correct course (branch first) or refine scope (add hint). Otherwise lets the agent work.\n- **Target message count**: 2-4 messages. Default is silence.\n\n## User Turns\n\n### Turn 1 (after 0 agent turns) — Opens with the task\n**Context**: First message of the session. No prior exchange.\n**Said**: \"need a little patch for `entire explain` that prints the help text if a parameter is passed without any qualifier flags\"\n**Why**: States the request concisely. Assumes agent knows the codebase. Does not specify how to implement — just describes the desired behavior.\n\n### Turn 2 (after ~4 agent turns) — Course correction\n**Context**: Agent read the explain.go file and attempted to edit it immediately. User rejected the edit.\n**Said**: \"let's cut a branch first\"\n**Why**: The agent tried to modify code without creating a branch. User wants proper workflow (checkout -> edit -> test). Short instruction, expects agent to handle the details.\n\n### Turn 3 (after ~14 agent turns) — Refinement\n**Context**: Agent implemented the fix (show help on positional arg), added tests, ran linter and tests — all passing. Reviewer skill ran and approved. User then reviewed the behavior.\n**Said**: \"let's do the hint if it's small\"\n**Why**: User wants a small UX improvement on top of the existing fix: print a \"Hint:\" message on stderr before the help text, explaining *why* help is being shown. \"if it's small\" implies don't over-engineer.\n\n## Overview\n\n| Field | Value |\n|-------|-------|\n| Total user turns in session | 21 (3 genuine + 18 tool_result) |\n| Genuine user messages | 3 |\n| Session duration | ~8 minutes (22:19:53 to 22:28:36 UTC) |\n| User is | Experienced Go developer, knows their codebase |\n| User provides | Terse instructions, expects agent initiative |\n| User interrupts when | Agent skips workflow steps (e.g., no branch) |\n",
+  "base_user_persona": {
+    "source": "swe-together:user_simulation_prompt.md",
+    "text": "# User Simulator Prompt\n\n## Simulator Calibration\n\n- **Total genuine user messages**: 3 (out of 21 total user turns; rest are tool_result pass-throughs)\n- **Longest silence**: ~5 minutes of agent activity between the branch-creation directive and the follow-up \"do the hint\" message\n- **Communication pattern**: Terse, directive. Intervenes only to correct course (branch first) or refine scope (add hint). Otherwise lets the agent work.\n- **Target message count**: 2-4 messages. Default is silence.\n\n## User Turns\n\n### Turn 1 (after 0 agent turns) — Opens with the task\n**Context**: First message of the session. No prior exchange.\n**Said**: \"need a little patch for `entire explain` that prints the help text if a parameter is passed without any qualifier flags\"\n**Why**: States the request concisely. Assumes agent knows the codebase. Does not specify how to implement — just describes the desired behavior.\n\n### Turn 2 (after ~4 agent turns) — Course correction\n**Context**: Agent read the explain.go file and attempted to edit it immediately. User rejected the edit.\n**Said**: \"let's cut a branch first\"\n**Why**: The agent tried to modify code without creating a branch. User wants proper workflow (checkout -> edit -> test). Short instruction, expects agent to handle the details.\n\n### Turn 3 (after ~14 agent turns) — Refinement\n**Context**: Agent implemented the fix (show help on positional arg), added tests, ran linter and tests — all passing. Reviewer skill ran and approved. User then reviewed the behavior.\n**Said**: \"let's do the hint if it's small\"\n**Why**: User wants a small UX improvement on top of the existing fix: print a \"Hint:\" message on stderr before the help text, explaining *why* help is being shown. \"if it's small\" implies don't over-engineer.\n\n## Overview\n\n| Field | Value |\n|-------|-------|\n| Total user turns in session | 21 (3 genuine + 18 tool_result) |\n| Genuine user messages | 3 |\n| Session duration | ~8 minutes (22:19:53 to 22:28:36 UTC) |\n| User is | Experienced Go developer, knows their codebase |\n| User provides | Terse instructions, expects agent initiative |\n| User interrupts when | Agent skips workflow steps (e.g., no branch) |\n"
+  },
+  "initial_pool_persona": {
+    "id": "student_needing_explanation",
+    "name": "Student requiring explanations",
+    "attributes": {
+      "technical_context": "Can read the basic control flow and interfaces relevant to this task, but needs help connecting erroneous inputs, state changes, and the patch. Do not infer grade level, course language, or specific knowledge gaps from the role.",
+      "primary_goal": "Complete the original repair while also obtaining explanations and self-check materials that can be verified against this task's code and examples; passing code tests must not substitute for delivering explanations.",
+      "interaction_preferences": "Explicitly prefers an explanation of the error first, followed by an explanation of the patch, using one small, verifiable example at a time. Learning constraints are explicitly stated by the student and recorded; do not infer from wording whether the student has understood.",
+      "constraints": "After public activation, comply with the binding implementation and learning constraints, such as using only permitted dependencies, preserving specified interfaces, or using restricted solution methods; the constraints must be compatible with the original task. The student's internal level of understanding must not be used as a success condition.",
+      "episode_binding": {
+        "applicable_tasks": "An issue with an explainable error path and valid boundary cases, for which the original repair can be completed within the learning constraints.",
+        "required_fixtures": "Disclose the error scenario, old code, and current patch snapshot; the learning template requires preregistered compatible constraints and sources of verifiable examples.",
+        "missing_inputs": "Skip the third template when there are no learning constraints; do not invent course rules on the fly. The pair is not applicable when disclosable error materials for this task cannot be provided."
+      },
+      "disclosure_policy": {
+        "initial": "Make clear that explanations are required deliverables, not an optional style choice; state the preference to see the error path first, and avoid lengthy, unsolicited tutorials.",
+        "later": "Request a counterexample after the first proposal, request correctness and boundary walkthroughs after the first patch, and disclose the specific, already binding learning constraints and self-check material requirements after the implementation is shown. New constraints apply only to subsequent deliverables and revisions, without retroactively penalizing earlier proposals."
+      }
+    }
+  },
+  "unbound_template_ids": [
+    "student_learning_constraints_and_check",
+    "student_patch_and_boundary_reasoning"
+  ],
+  "stop_policy": "completion_requires_all_persona_requirements_met; hard budget and failure stops remain terminal",
+  "base_verifier": "repaired-native-v2",
+  "pool_variant": "full109_v1",
+  "binding_sha256": "653ccbb8655f23f217537669a2d2c3770c0e38f40e538258ec5d2f28e0302df5"
+}

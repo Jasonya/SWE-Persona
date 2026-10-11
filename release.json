@@ -1,0 +1,38 @@
+{
+  "name": "SWE-Persona Lite",
+  "version": "0.5.0rc9",
+  "schema_version": "1.0.0",
+  "distribution": "lite",
+  "dataset": {
+    "file": "swe-persona-lite.parquet",
+    "tasks": 100,
+    "unique_task_ids": 100,
+    "sha256": "e036d834f0fd0d8aab7c3476a4866dfe794ff503d0c92d71ea58700dc068d1fc",
+    "bytes": 114948733,
+    "source_benchmarks": {
+      "Terminal-Bench 3.0": 23,
+      "SWE-bench Pro": 26,
+      "SWE-bench-Live MultiLang": 19,
+      "SWE-Together": 4,
+      "DeepSWE": 28
+    }
+  },
+  "runtime_profiles": {
+    "terminal-bench-3": 23,
+    "swe-bench-pro-mini": 9,
+    "swe-bench-pro-shell": 17,
+    "swe-bench-live": 19,
+    "swe-together": 4,
+    "deep-swe": 28
+  },
+  "runtime_sha256": "dd031fcd69aa74e2a8ac3ff64590e7e40f04ade7822a87f57899a045efe83b5d",
+  "scoring_entrypoint": "scripts/score.py",
+  "evaluation_entrypoint": "swe-persona run",
+  "batch_entrypoint": "scripts/evaluate.py",
+  "all_tasks_end_to_end_certified": false,
+  "api_configuration_roles": [
+    "agent",
+    "user_simulator"
+  ],
+  "judge_api_source": "user_simulator"
+}

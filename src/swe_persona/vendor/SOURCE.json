@@ -1,0 +1,436 @@
+{
+  "source_commit": "70b53a7b66edf7178b86946f53aa93fdf55d53ad",
+  "note": "Runtime source only. File paths follow the packaged layout; sha256 values identify the original source before integration changes. No task archives, construction receipts, trajectories, historical scores or credentials.",
+  "files": [
+    {
+      "profile": "tb3",
+      "path": "tb3/run.py",
+      "sha256": "6b846a05fa7f0f5fd7e6d2cea6317badd18c392698a64df6bf3d926f7151f8a2"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/calibrate_judge.py",
+      "sha256": "a42db0360a349371f504d36de6a18a82edf55a50e63e5f254105306627e021b9"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/protocol.py",
+      "sha256": "81787716968669412a5dfad5ffc744b08dd2c0016af581b4aca8e9c3e9fbab61"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/persona_adapter.py",
+      "sha256": "c27a63fc3648fbecacfd6ccc619cb6c1cc9e011cf4874f332f4f7aefec391d49"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/terminal_agent.py",
+      "sha256": "6680e64665e476ecc0b3635ab155ee65545b0177d2b5ad6c41605a3e1fcbe060"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/trial_adapter.py",
+      "sha256": "b8479988e6acdb61d2fa91259a4d1282de7dbd530123fecd6ed11a418b794a8b"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/personalization.py",
+      "sha256": "247620ab9b8823790a9ad1342d23c9d307dbd0162afa74424634bb7b51e59d5e"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/screening.py",
+      "sha256": "c6800e7df7de6ca680391c09f91732149a9a576c9f9d1524910ec7a806c4f45c"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/azure_client.py",
+      "sha256": "ab23c2da4c0585fab54c499cc60be2cf609388f8b67fa4ffa7f10b0a0917bac1"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/checker_runtime.py",
+      "sha256": "39276188bb78c09bde26318583b125279b756c5279f24c2844942d639f2a4ad9"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/requirement_loop.py",
+      "sha256": "cc6d77add4f5917fb4f30c6c81259b409ca2b5e662b8d4894b6c1138834208b6"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/preflight.py",
+      "sha256": "49869634c64cb894a05e0611e924d8da40b00820f46c4bdeb750cef1276d28c6"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/vendor/user_simulation/LICENSE",
+      "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/vendor/user_simulation/src/__init__.py",
+      "sha256": "36854cdc91657580ec999cc4f7aa8a095c37283e14ce09fcaf99c2dc56cde6ce"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/vendor/user_simulation/src/personas/__init__.py",
+      "sha256": "a134d007695b898105a24ef9fb2463a79af7875768715f4d753850f391310182"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/vendor/user_simulation/src/personas/conflicts.py",
+      "sha256": "74fe5a1b9a792a9616a88c90955c6043337aaf99322f94a1772289227fe6447f"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/vendor/user_simulation/src/personas/persona.py",
+      "sha256": "45aba173984f586bfd5f82bc93af1dbfbfd9ac9df7bb9609423b53da5bbcbf11"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/vendor/user_simulation/src/personas/render_system_prompt.py",
+      "sha256": "f38f16526f42d0b875d38c5c557c682f0ab5f37ca0e9b92b64a995782d3e9ffa"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/vendor/user_simulation/src/personas/salience.py",
+      "sha256": "1cb629a6661b5aace9281e6160590db64c4559fefd7879f70ed152acdcb42dd2"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/vendor/user_simulation/src/personas/schema.py",
+      "sha256": "c8097971daf433fe19a19af933fe82138f8effb7a3095e126a4caf946f15a20c"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/vendor/user_simulation/src/personas/simulator.py",
+      "sha256": "5a9ea9874d4cf27b19aee3e277b5753d7b316afd893c180704bba90b2ce3ae1e"
+    },
+    {
+      "profile": "tb3",
+      "path": "tb3/runtime/vendor/user_simulation/src/personas/profiles/dev_skeptical_senior.json",
+      "sha256": "314f3c5104dcbbd88b7b162fe76e33e1c99b44d7f523b167bcfb91a497329137"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/run.py",
+      "sha256": "120af966f38dde07a1b0d59649aa6fdb3e82a6bf747a5b96aa581b4e74fa161e"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/calibrate_judge.py",
+      "sha256": "6859f8317ceb6ec84b19866d3f4ed85c32f0856dfe59899892a0044b18d75ac1"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/prompts/experience_prompt.md",
+      "sha256": "d1e4cf64b3028a0dda6913277c65ea4f3d237fae4bb1c160c13240dbf80c69c0"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/prompts/judge_prompt.md",
+      "sha256": "de632a38842674eaf22a619520587c6731cbe6c76507d4a2685155ec77d6b915"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/prompts/simulator_prompt.md",
+      "sha256": "9474d9a67157033d2bae7b1f0ef2a3542e99b963cf4f9f54380919d2a35b16bd"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/checker/checker.py",
+      "sha256": "9a4f233ca2705b91040b0dae0fe813a930a4337109e783e21dbc2e02fcd450e5"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/__init__.py",
+      "sha256": "fa0de8f65e9ae848fdc914b72d27d29f5989b6880ee28641c5b08f25303cf428"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/agent_harbor.py",
+      "sha256": "6182005cc63ad670e860fd12913553598fa26e62a4fe55a7d9808c6e17d7612a"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/controller.py",
+      "sha256": "3e03b4c79960725f54b0edc1dcf63739938ddee11ecf87569220042dfde16c3c"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/episode.py",
+      "sha256": "976371a1117a3b51d69000556a7cd7806f30f1be74de0ad50037c98a614b8d72"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/evaluate.py",
+      "sha256": "60934542d3873fed4cba6dd35d2781ccb2b073704568825ebf2d75907ec1f0bb"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/experience.py",
+      "sha256": "6aa56f4682588e9819ff60ea3629e99718ae4ac62ce11eeccceb0f9b6dc46cf2"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/judge.py",
+      "sha256": "25c12bbc44e63071a782fee2b0caa20a1c731b1b2781f8fd2e58d5ec20c02b10"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/llm.py",
+      "sha256": "38f64b79576409704260f6d922ec19b7117e1ad34fb92e3ae426500185482c2d"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/network_probe.py",
+      "sha256": "0bd9b9327ba31f72c52e91b08acb536ee203de636cb6a8b33e92ddfc354abb0f"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/simulator.py",
+      "sha256": "04199740a477685e48a0ea2c5a8c433119a5eb0e9fa6eebc51e46b6dec1f5cd3"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/task.py",
+      "sha256": "b4c173cd97137df742c41468881ec0cb3280598b39103ec0ac59b7ebc306135b"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/bridge/harbor_mini_runtime.py",
+      "sha256": "60eff1262bf8cba167dcbc6560b5ee087325a939c9f4ebeca04cd46de467e9ed"
+    },
+    {
+      "profile": "swe-bench-pro-mini",
+      "path": "swe_pro/mini/runtime/pcb_v6/bridge/mini_sidecar.py",
+      "sha256": "5b2d1760f28ab42e94c16a2208a74241dd05263b15f9b2cfd73409bef5556477"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/run.py",
+      "sha256": "9472e9e28a13fbf94d5a4105b9fd56f4f1444ec531114c1e102ba75611bdc395"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/calibrate_judge.py",
+      "sha256": "745b70cd6c7de2f0e4fcbb4327a24394253215ff33854f0e29888677d2a91981"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/run_case.py",
+      "sha256": "bbdb3ceb13b2348a63f3fa5a7189cdae06189104421928a0bfc201bfcd46e4ef"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/prepare_submodules.py",
+      "sha256": "49ce2f810efc7f18427f386af2898040348f97e67300aae4428ea9aee71f50ff"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/human-interactive-coding-personas.v3.json",
+      "sha256": "10274c216950f630f5ccf411d33dcbeddddfdc3ae629b25dc3f1ea891128a81c"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/__init__.py",
+      "sha256": "a0e7b154218bcfdcc5c87e4faf51afed93ab9b178963d8e32add759b71feb5ec"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/agent.py",
+      "sha256": "3d534bd330bf19ae8cd3a11adb57cd97421a302f3bdc41418761e86de4d21431"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/agent_mini.py",
+      "sha256": "016d86a4f25627b62ac93ad04ab8719df1c79a2851cad528a9abf42b6b3906e8"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/checkers.py",
+      "sha256": "0963f230684874872b555ba0bc2dbecac28694feab99a45e301599f2457857c3"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/controller.py",
+      "sha256": "a5efae3a3b04d572d41ac440a7f1aeb7fea1f9359d9c960f0741af97fcc6daeb"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/disclosure.py",
+      "sha256": "07effe6edbd1d0ea3214b40ca5c67fc13c85afaaf4d7a0b283670060617ee34f"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/dockerx.py",
+      "sha256": "b5228d72869ae91b22e477319687874a0e7be766219e301ff0251c6885940107"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/evidence_policy.py",
+      "sha256": "28d99f30bb220a6a627a8c11307d0c13eca6f820b991ce680879fc80327d07d5"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/gpt6.py",
+      "sha256": "6d460b2a2b65ab0437f228c218f51c9c93fdccf31a317d7ef204904af8e08084"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/judge.py",
+      "sha256": "13e1074860a4f6ea2bccf39c7bd456dad4d18de8d42cb3fdeb84d945ce59a304"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/ledger.py",
+      "sha256": "39fc1662dbe07d9816f9179ab10a8db368a7fd93515ef8af3fabe83edb4652b4"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/llm.py",
+      "sha256": "587d3d046caa1c50553488669144c70d36af964b5b2321a30d4d5befdc44ab86"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/portable_shell.py",
+      "sha256": "cd7a26a75b0afbd766070a1d81ceeab07b51dc8fffdfc86ddf2831e5da21820d"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/registry.py",
+      "sha256": "707405c64cb8cdb03650bd68c4c4c296f501de6d67ff8ee722b3183ac658e366"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/rubric_checker.py",
+      "sha256": "0a03a53403bf97f1e9079900c92e4806ea08999ffaf21fd85d0edef4c70cdc8e"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/run_episode.py",
+      "sha256": "b2a61b42a37d65d1f2840730d6b7b757d30d41ee8f28c9b9eb77c655d04418a9"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/simulator.py",
+      "sha256": "a71b6d7044af452178e200b914b8098bfad1089f7e811a71185089e4b46d5ad5"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/task_adapter.py",
+      "sha256": "aaf3b7e472d20947576b95d690695881fa195cd661dc59d5f6106d32b9d67066"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/validate_bindings.py",
+      "sha256": "70b4e6f82978681e9e646fd7bd33822bea7e8f72ec617160fbe98945051ae97a"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/validate_rubric.py",
+      "sha256": "6b760443139f9df5b5606d7da7536d75f302634148b417343b728252687b228e"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/verifier.py",
+      "sha256": "3ac0ecf6b345da4e7e91acd4b9f1e4e22520899f3708cde777873c85f93ab57b"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/agent.py",
+      "sha256": "afa5a8df5c0265f23c8355a3af3cd75795a571871cd46c8d56f7c1468a9bccef"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/checkers.py",
+      "sha256": "8b7948f3833b4b1da8c9892b4ea85a538321cc49c908cba793452822df2f6a85"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/controller.py",
+      "sha256": "bd64ba6b3fbfaa5ecbf5f16dc82704f314fb7062cd7aecf574e3be68708440b0"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/dockerx.py",
+      "sha256": "a6d78aa26466aa6f3a6f0cf68670c0a40a0c4b3a0eca3d976e83dfcdbf48b004"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/gpt6.py",
+      "sha256": "f88f270a8638718df96eaadf970ef43109c306c7ff50fb50837f84b6b8a8f157"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/judge.py",
+      "sha256": "43b7112b3ad1518abbb0aadd54067d649d0fd8300f9ab012538fe0cc4af6b73f"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/ledger.py",
+      "sha256": "453e90e9def8938da90c0cacbe0844302858affb573f4c1a82d980da42344b34"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/llm.py",
+      "sha256": "1f4d8781e296bcf8f1c2c5aaec4972b3fb488ff1f5f5cb2f2db484b06ad0fcbe"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/registry.py",
+      "sha256": "a78d2c9e5b7ec5879c247285eb5429ab5ae5c68873b97d96d352839debb37981"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/rubric_checker.py",
+      "sha256": "64c3d73d3a4fca4bafaf246d3923642acd1308be35b1925cece91e76d0c5f437"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/run_episode.py",
+      "sha256": "f2e4bf9c16b6acbb7d35b4c086a65a44cf5eb7606e3438fe1956116827f8f34c"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/simulator.py",
+      "sha256": "8de5c343258ea6f0d3a3f600a68e7ce3cd4a7f1a23d76278506751fbce5c659d"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/task_adapter.py",
+      "sha256": "17f962a35cdb4a101ef620a93ce6c068f4e69e914e2eb237ff4a2cff8069b587"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/validate_bindings.py",
+      "sha256": "af7f9a326139be4d46b81cc107432658d5dbe44b923ff5fd96196b208963b7f1"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/validate_rubric.py",
+      "sha256": "6034033719e19b25040edba03a2b4eaa2ffdce50294b179c6cce79663deccaf3"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/tb2_persona_pilot/verifier.py",
+      "sha256": "49bc13959acdbf598ab642e17db67686255c1f2962e4798665f7c0501f9d7256"
+    },
+    {
+      "profile": "swe-bench-pro-shell",
+      "path": "swe_pro/shell/portable/runtime-v3/runner/fixtures/checker_driver.py",
+      "sha256": "6dd1d0770be28e7ed98c3ba303b8d2b7ceba34b6586e426f3cedfced4d0d69a3"
+    }
+  ],
+  "source_layout": {
+    "swe_pro/mini": {
+      "upstream_directory": "swe_v6",
+      "runtime_profile": "swe-bench-pro-mini"
+    },
+    "swe_pro/shell": {
+      "upstream_directory": "swe_v7",
+      "runtime_profile": "swe-bench-pro-shell"
+    }
+  }
+}

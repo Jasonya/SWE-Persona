@@ -1,0 +1,24 @@
+{
+  "persona_repository": "MatrAIx-ai/PersonaCodeBench",
+  "persona_commit": "3f8d716cc96955325d5e29a845c3556f60be080b",
+  "deepswe_repository": "datacurve-ai/deep-swe",
+  "deepswe_commit": "0b9fabbb63b9104d678fe965e1632f2dd9eaa2ea",
+  "task": "tomlkit-toml-table-converters",
+  "task_files": {
+    "environment/Dockerfile": "3e8ab16d93b9b822098c4c98f8eafda5ba3b870464e1d3e8030bf6473237806a",
+    "instruction.md": "f2cad77bd81747e1b66917791cb0dfb1ed349c9f19ebcf2b8c0724151c9c73e8",
+    "solution/solution.patch": "ceed00ee93606e6466f46237dbbeb1106ee47f3816ee4031f1054e52d2af66ad",
+    "solution/solve.sh": "2f111d19625d9685d00029c2c3efb7719ee2311c6ab4f0ab0ebcc37f09c35198",
+    "task.toml": "32faea943936aa014220ae1c98144cc0a88b29c45a9a1b53c02345b10b783c41",
+    "tests/Dockerfile": "1a004252c203ce62f4e83350d946013d3238ab8201fc59db56c82237dbb45c05",
+    "tests/config.json": "4d87f2da8504baf7fcbbc5b2859560df0c56e4596026ff2767361732f6f8a7b5",
+    "tests/grader.py": "47cc9eaadf21e636323c360ec4fa786f0733ec9fd1d21ea5a5717ff9f8c4077c",
+    "tests/test.patch": "a587bd8a6bc35b9ec149a8f097ca2f06cee1aac53d20ac1a3576e79993a3fef5",
+    "tests/test.sh": "eeab3b4d7463a2a3df9874a7dbd77af3b37d064c67b7bc313359655615e090b7"
+  },
+  "vendored_files": {
+    "data/personas.v3.json": "b28eb804f9544ab27f7c3069b35e99d7020b91d6fb20570c0d32f29e4e4a3152",
+    "data/instruction.md": "f2cad77bd81747e1b66917791cb0dfb1ed349c9f19ebcf2b8c0724151c9c73e8",
+    "dspilot/ledger.py": "0c0657bcf5ccdfe39b0947fa5f725bb9828fe2c61e1517df99a865782f65786e"
+  }
+}

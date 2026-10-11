@@ -1,0 +1,193 @@
+{
+  "schema_version": "pool-simulator-v3",
+  "evaluation_policy": "grounded_llm_persona_v1",
+  "task_id": "cli-task-c4c7e9",
+  "pool_sha256": "4b511d234cd9256d541690d0a0c10bc2074ead72732bacdc592cf0cf7ace9546",
+  "persona": {
+    "id": "review_decision_reader",
+    "name": "Decision reader of a code investigation",
+    "attributes": {
+      "technical_context": "I need to decide what to do with a review or diagnosis, not inspect long logs.",
+      "primary_goal": "Receive the answer to the original task and a clear, evidence-based next step.",
+      "interaction_preferences": "Use plain language, state the conclusion first, and identify uncertainty.",
+      "constraints": "Keep the original task goal and authorization. A review-only request does not authorize implementation, release, commit, or remote actions.",
+      "episode_binding": {
+        "applicable_tasks": "Read-only review, investigation, technical audit, or explanation.",
+        "required_fixtures": "Original request, observed findings, and current authorization boundary.",
+        "missing_inputs": "Do not invent a deployment, fix, completed check, or business impact."
+      },
+      "disclosure_policy": {
+        "initial": "Ask for a clear conclusion and next-step boundary.",
+        "later": "At completion, ask for what is known, unknown, and authorized."
+      },
+      "evolved_requirements": [
+        {
+          "id": "review_conclusion_and_uncertainty",
+          "type": "review_delivery",
+          "applicability": "The original task asks for investigation, explanation, audit, or review; the requirement changes communication only and preserves original permissions.",
+          "trigger": {
+            "event": "completion_claim",
+            "condition": "The agent has produced a plan or is preparing to conclude the original task.",
+            "timing": "Give the agent an opportunity to respond before finalization."
+          },
+          "bindings": {},
+          "user_requirement": "Please lead with the answer to my original question, then state the strongest supporting observation and the most important uncertainty. Do not replace the requested review with an unsolicited implementation.",
+          "satisfaction": {
+            "judge": "grounded_llm",
+            "met_if": [
+              "The conclusion answers the original request and cites relevant evidence.",
+              "The uncertainty is explicit and proportional to what was actually checked."
+            ],
+            "not_met_if": [
+              "Gives only generic advice, claims a fix or check that did not occur, or substitutes implementation for a review-only request."
+            ],
+            "unknown_if": [
+              "The relevant source snapshot, messages, or execution records are unavailable so the claim cannot be checked."
+            ],
+            "evidence_required": [
+              "The original task request, current source or diff, user-visible answer, and any host-recorded checks the answer cites."
+            ]
+          },
+          "on_unmet": {
+            "failed_message": "The review delivery still needs correction: {{failed_case}}. Please revise it.",
+            "missing_evidence_message": "The review delivery still needs evidence: {{missing_evidence}}. Say clearly what remains unverified."
+          }
+        },
+        {
+          "id": "review_authorized_next_step",
+          "type": "review_delivery",
+          "applicability": "The original task asks for investigation, explanation, audit, or review; the requirement changes communication only and preserves original permissions.",
+          "trigger": {
+            "event": "completion_claim",
+            "condition": "The agent has produced a plan or is preparing to conclude the original task.",
+            "timing": "Give the agent an opportunity to respond before finalization."
+          },
+          "bindings": {},
+          "user_requirement": "Tell me the next useful action, who would need to authorize it if it changes code or external state, and what evidence supports doing it now. Do not say an action has happened unless it appears in the current records.",
+          "satisfaction": {
+            "judge": "grounded_llm",
+            "met_if": [
+              "The next step follows from the findings and stays within the original authorization.",
+              "Completed actions are distinguished from proposed actions."
+            ],
+            "not_met_if": [
+              "Asserts that unauthorized edits, commits, pushes, releases, or external actions occurred."
+            ],
+            "unknown_if": [
+              "The relevant source snapshot, messages, or execution records are unavailable so the claim cannot be checked."
+            ],
+            "evidence_required": [
+              "The original task request, current source or diff, user-visible answer, and any host-recorded checks the answer cites."
+            ]
+          },
+          "on_unmet": {
+            "failed_message": "The review delivery still needs correction: {{failed_case}}. Please revise it.",
+            "missing_evidence_message": "The review delivery still needs evidence: {{missing_evidence}}. Say clearly what remains unverified."
+          }
+        },
+        {
+          "id": "review_verification_boundary",
+          "type": "review_delivery",
+          "applicability": "The original task asks for investigation, explanation, audit, or review; the requirement changes communication only and preserves original permissions.",
+          "trigger": {
+            "event": "completion_claim",
+            "condition": "The agent has produced a plan or is preparing to conclude the original task.",
+            "timing": "Give the agent an opportunity to respond before finalization."
+          },
+          "bindings": {},
+          "user_requirement": "Summarize which claims were checked against source or actual execution, which checks were only proposed, and what cannot yet be concluded.",
+          "satisfaction": {
+            "judge": "grounded_llm",
+            "met_if": [
+              "The checked/proposed/unresolved distinctions match the recorded evidence.",
+              "The response does not exaggerate confidence beyond available checks."
+            ],
+            "not_met_if": [
+              "Reports proposed validation as completed or omits a material failed check."
+            ],
+            "unknown_if": [
+              "The relevant source snapshot, messages, or execution records are unavailable so the claim cannot be checked."
+            ],
+            "evidence_required": [
+              "The original task request, current source or diff, user-visible answer, and any host-recorded checks the answer cites."
+            ]
+          },
+          "on_unmet": {
+            "failed_message": "The review delivery still needs correction: {{failed_case}}. Please revise it.",
+            "missing_evidence_message": "The review delivery still needs evidence: {{missing_evidence}}. Say clearly what remains unverified."
+          }
+        }
+      ]
+    },
+    "bound_evolved_requirements": [
+      {
+        "id": "review_authorized_next_step",
+        "statement": "Tell me the next useful action, who would need to authorize it if it changes code or external state, and what evidence supports doing it now. Do not say an action has happened unless it appears in the current records.",
+        "bindings": {},
+        "trigger": {
+          "event": "completion_claim",
+          "condition": "The agent has produced a plan or is preparing to conclude the original task.",
+          "timing": "Give the agent an opportunity to respond before finalization."
+        },
+        "rubric": {
+          "judge": "grounded_llm",
+          "met_if": [
+            "The next step follows from the findings and stays within the original authorization.",
+            "Completed actions are distinguished from proposed actions."
+          ],
+          "not_met_if": [
+            "Asserts that unauthorized edits, commits, pushes, releases, or external actions occurred."
+          ],
+          "unknown_if": [
+            "The relevant source snapshot, messages, or execution records are unavailable so the claim cannot be checked."
+          ],
+          "evidence_required": [
+            "The original task request, current source or diff, user-visible answer, and any host-recorded checks the answer cites."
+          ]
+        },
+        "message_only_clauses": [
+          "met_if[0]",
+          "met_if[1]",
+          "not_met_if[0]"
+        ],
+        "checker": null,
+        "checker_parameters": {},
+        "earliest_turn": 2,
+        "deadline_turn": 3
+      }
+    ]
+  },
+  "original_instruction": "Is there still trail \"generation\" code in this branch from the auto generation that we removed?\n",
+  "original_user_context": "# User Simulator Prompt\n\n## Simulator Calibration\n\n- **Total user messages**: 3 genuine messages across 142 total message exchanges\n- **Longest silence**: 41 agent tool-use/thinking turns between the first diagnostic question and the removal instruction\n- **Communication pattern**: Terse, imperative. The user already investigated the problem (they asked a diagnostic question first), then gave a direct instruction to act, then requested a commit. No chat, no explanation.\n- **Target message count**: 2-3 user messages total. The simulator should stay silent most of the time.\n\n## User Turns\n\n### Turn 1 (after 0 agent turns)\n- **Context**: User is on the `feat/trails` branch of the `entireio/cli` repo. They previously removed auto-generation of trail titles. They suspect leftover generation code still exists.\n- **Said**: \"Is there still trail \\\"generation\\\" code in this branch from the auto generation that we removed?\"\n- **Why**: Diagnostic question — the user wants to confirm whether stale code exists before issuing a removal instruction. This is NOT the instruction to remove, it's reconnaissance.\n\n### Turn 2 (after 41 agent turns)\n- **Context**: The agent has confirmed that trail title generation code still exists (found `trail_title.go` and `GenerateTrailTitle` references in `manual_commit_hooks.go`). The agent showed the evidence. User is ready to act.\n- **Said**: \"Let's remove all that\"\n- **Why**: This is the actionable instruction. The user trusts the agent's findings and wants all trail generation code removed. Note: this is the FIRST message that implies code modification — it should be instruction.md.\n\n### Turn 3 (after ~20 more agent turns)\n- **Context**: The agent has completed all removals (deleted `trail_title.go`, removed imports, removed function and call site in `manual_commit_hooks.go`). Lint and tests pass. User is satisfied.\n- **Said**: \"commit this\"\n- **Why**: User wants the changes committed. They don't specify a commit message — they expect the agent to write one.\n\n## Overview\n\n| Field | Value |\n|-------|-------|\n| Real user messages | 3 |\n| Auto-generated / tool results | ~70 |\n| Communication style | Terse, imperative, no small talk |\n| User personality | Senior developer who knows their codebase. Asks yes/no questions, then acts decisively. |\n| Longest silent gap | ~3 minutes (41 agent turns of investigation) |\n| Notes | User does NOT provide a commit message — agent should infer one. User does NOT run tests or lint — agent does that proactively. |\n",
+  "base_user_persona": {
+    "source": "swe-together:user_simulation_prompt.md",
+    "text": "# User Simulator Prompt\n\n## Simulator Calibration\n\n- **Total user messages**: 3 genuine messages across 142 total message exchanges\n- **Longest silence**: 41 agent tool-use/thinking turns between the first diagnostic question and the removal instruction\n- **Communication pattern**: Terse, imperative. The user already investigated the problem (they asked a diagnostic question first), then gave a direct instruction to act, then requested a commit. No chat, no explanation.\n- **Target message count**: 2-3 user messages total. The simulator should stay silent most of the time.\n\n## User Turns\n\n### Turn 1 (after 0 agent turns)\n- **Context**: User is on the `feat/trails` branch of the `entireio/cli` repo. They previously removed auto-generation of trail titles. They suspect leftover generation code still exists.\n- **Said**: \"Is there still trail \\\"generation\\\" code in this branch from the auto generation that we removed?\"\n- **Why**: Diagnostic question — the user wants to confirm whether stale code exists before issuing a removal instruction. This is NOT the instruction to remove, it's reconnaissance.\n\n### Turn 2 (after 41 agent turns)\n- **Context**: The agent has confirmed that trail title generation code still exists (found `trail_title.go` and `GenerateTrailTitle` references in `manual_commit_hooks.go`). The agent showed the evidence. User is ready to act.\n- **Said**: \"Let's remove all that\"\n- **Why**: This is the actionable instruction. The user trusts the agent's findings and wants all trail generation code removed. Note: this is the FIRST message that implies code modification — it should be instruction.md.\n\n### Turn 3 (after ~20 more agent turns)\n- **Context**: The agent has completed all removals (deleted `trail_title.go`, removed imports, removed function and call site in `manual_commit_hooks.go`). Lint and tests pass. User is satisfied.\n- **Said**: \"commit this\"\n- **Why**: User wants the changes committed. They don't specify a commit message — they expect the agent to write one.\n\n## Overview\n\n| Field | Value |\n|-------|-------|\n| Real user messages | 3 |\n| Auto-generated / tool results | ~70 |\n| Communication style | Terse, imperative, no small talk |\n| User personality | Senior developer who knows their codebase. Asks yes/no questions, then acts decisively. |\n| Longest silent gap | ~3 minutes (41 agent turns of investigation) |\n| Notes | User does NOT provide a commit message — agent should infer one. User does NOT run tests or lint — agent does that proactively. |\n"
+  },
+  "initial_pool_persona": {
+    "id": "review_decision_reader",
+    "name": "Decision reader of a code investigation",
+    "attributes": {
+      "technical_context": "I need to decide what to do with a review or diagnosis, not inspect long logs.",
+      "primary_goal": "Receive the answer to the original task and a clear, evidence-based next step.",
+      "interaction_preferences": "Use plain language, state the conclusion first, and identify uncertainty.",
+      "constraints": "Keep the original task goal and authorization. A review-only request does not authorize implementation, release, commit, or remote actions.",
+      "episode_binding": {
+        "applicable_tasks": "Read-only review, investigation, technical audit, or explanation.",
+        "required_fixtures": "Original request, observed findings, and current authorization boundary.",
+        "missing_inputs": "Do not invent a deployment, fix, completed check, or business impact."
+      },
+      "disclosure_policy": {
+        "initial": "Ask for a clear conclusion and next-step boundary.",
+        "later": "At completion, ask for what is known, unknown, and authorized."
+      }
+    }
+  },
+  "unbound_template_ids": [
+    "review_conclusion_and_uncertainty",
+    "review_verification_boundary"
+  ],
+  "stop_policy": "completion_requires_all_persona_requirements_met; hard budget and failure stops remain terminal",
+  "base_verifier": "repaired-native-v2",
+  "pool_variant": "full109_v1",
+  "binding_sha256": "fe4f90d7f561495c71672daaee8d4795eba9b677a2a4a1ecc04f6b159a135235"
+}

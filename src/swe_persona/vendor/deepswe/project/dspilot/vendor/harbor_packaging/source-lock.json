@@ -1,0 +1,26 @@
+{
+  "repository": "https://github.com/harbor-framework/harbor",
+  "commit": "dbd6dd045cbd7135c4a3994515df3907e3b9f0ea",
+  "version": "0.23.0",
+  "scope": "Unmodified official modules needed for DatasetManifest, Task and Packager, with upstream wheel metadata/license. Not a full Harbor runtime.",
+  "files": {
+    "harbor/__init__.py": "be28c0757c38ec9dc1ab9d3b2a6756df34ef5871e6755af88f8938b47fa455ab",
+    "harbor/constants.py": "adc8213e55facf42a89db48949f62cb95a842c7a417045d477828cd0bff0bb1e",
+    "harbor/models/dataset/manifest.py": "d51002d3e41b968f6a204080b51a0fcebb5848e460709a05008c90d915f154f2",
+    "harbor/models/package/reference.py": "c8f7ba00f0f9fc10c75f6c6b5ede82bebd2c3f5c43465b2b5591aea9e1d9ad8d",
+    "harbor/models/package/version_ref.py": "2c8203ebff4b0b18bea54da5265ad63646c94a19ecdee2323567358328138656",
+    "harbor/models/task/config.py": "1afbc71e5e70785c19018b6a262b228e090c5bd73ab9239adc25d33163ad4e03",
+    "harbor/models/task/paths.py": "3bf2662e4d7453ad982ce6ab84b53c98bebd0cd0d9b1a636dc79e87b3b6cfaf6",
+    "harbor/models/task/step_name.py": "f9e253b328a1ff820b13affcc1bad0703e5f31f16d936a53ba49ed4631deaa02",
+    "harbor/models/task/task.py": "de88877f90e09949c02c6764876ca53fc795be617f95c03c48e4b6e1e5885322",
+    "harbor/models/task/verifier_mode.py": "e3d30753a48cf741fc39f974e36e9730f6afb1e5da7ebffee32d9af6cc7ae1c2",
+    "harbor/publisher/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "harbor/publisher/packager.py": "bd4e49317fd2c9bdacc5194bb3c7884107d10c0c94ecd822333bbc89fab2f847",
+    "harbor/utils/path_safety.py": "592f057a79283b17ce150077679c88e26b225362a9e020322f5bd5310ff1f00f",
+    "harbor/utils/scripts.py": "494313097da228db23d81e267b537894f8aa61bf500f7c6ef96552322ec87660",
+    "harbor-0.23.0.dist-info/METADATA": "1aa4341181945eeab4f3e60bf50c101e780501a27b5f2f520dcff8886bb71cfe",
+    "harbor-0.23.0.dist-info/licenses/LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "harbor/models/task/artifacts.py": "d97ae6a1401b8499dd28b08245e54c3a648b9e09d8d21224b67a0a8e608edde4",
+    "harbor/models/trial/paths.py": "bc985600249f9113739ebc3a83724912d455dd30f9c062398d92e309673c64b8"
+  }
+}
