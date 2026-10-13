@@ -7,6 +7,7 @@
     "strict_json_schema": true,
     "timeout_sec": 120,
     "structured_output_mode": "json_schema",
+    "structured_output_fallback": true,
     "max_tokens_field": "max_completion_tokens"
   },
   "user_simulator": {
@@ -16,6 +17,7 @@
     "api_key_env": "SWE_PERSONA_SIMULATOR_API_KEY",
     "strict_json_schema": true,
     "structured_output_mode": "json_schema",
+    "structured_output_fallback": true,
     "timeout_sec": 300,
     "request_options": {
       "reasoning_effort": "medium",

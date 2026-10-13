@@ -258,8 +258,11 @@ class TogetherEnvelopeTests(unittest.TestCase):
                 values = examples(together.decision_envelope(current, acceptance_ready=ready))
                 self.assertEqual(len(values), 2 if ready and current is None else 1)
                 for value in values:
-                    expected = {'action','kind','content','requirement_id'}
-                    if value['action']=='accept': expected |= {'base_task_complete','completion_reason'}
+                    expected = {'action','kind','content','requirement_id','base_task_complete','completion_reason'}
+                    if value['action']!='accept':
+                        self.assertIsNone(value['base_task_complete'])
+                        self.assertIsNone(value['completion_reason'])
+                    Draft202012Validator(together.decision_schema()).validate(value)
                     self.assertEqual(set(value), expected)
                 if current:
                     self.assertEqual(values[0]['content'], due['statement'])

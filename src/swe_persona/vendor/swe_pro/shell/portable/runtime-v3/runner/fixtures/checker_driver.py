@@ -7,6 +7,8 @@ import argparse
 import ast
 import hashlib
 import json
+import re
+import tempfile
 import subprocess
 import sys
 from pathlib import Path
@@ -25,7 +27,7 @@ def emit(status: str, reason_code: str, **evidence) -> int:
 
 def run(args, *, input_text=None, timeout=1800, env=None):
     return subprocess.run(
-        args, cwd=APP_DIR, text=True, input=input_text, capture_output=True,
+        args, cwd=APP_DIR, text=True, encoding="utf-8", errors="replace", input=input_text, capture_output=True,
         timeout=timeout, env=env,
     )
 
@@ -217,6 +219,69 @@ def _apply_hidden_tests(base_commit: str) -> tuple[bool, str, dict]:
     return True, "hidden_test_patch_applied", overlay
 
 
+def compilation_diagnostics(text: str) -> bool:
+    """Only compiler diagnostics, never a missing executable/dependency signal."""
+    environment_patterns=(r'command not found',r'no required module provides package',
+        r'cannot find (?:module|package)',r'Could not resolve',r'Could not find or load main class',
+        r'error while loading shared libraries',r'INTERNALERROR',r'cannot send \(already closed',
+        r'(?m)^Killed$',r'Cannot allocate memory',r'No space left on device')
+    if any(re.search(pattern,text,re.I) for pattern in environment_patterns):return False
+    return bool(re.search(r'(?m)^\S+\.(?:go|java|rs|ts|tsx|c|cpp):\d+(?::\d+)?:.*'
+                          r'(?:undefined:|multiple-value|too many arguments|not enough arguments|'
+                          r'cannot use|error:|error TS\d+)',text)
+                or re.search(r'error\[E\d+\]:',text))
+
+
+def gold_execution_control(args, selected, required):
+    """Run the same frozen tests on base+gold in an isolated worktree.
+
+    A candidate compiler error is a functional failure only if the reference
+    implementation passes the same required tests in this environment. No
+    candidate file is reset, no test is weakened, and gold stays evaluator-only.
+    """
+    record={'policy':'reference-execution-control-v1','passed':False}
+    with tempfile.TemporaryDirectory(prefix='swepro-gold-control-') as directory:
+        root=Path(directory)/'repo'
+        added=run(['git','worktree','add','--detach',str(root),args.base_commit],timeout=60)
+        if added.returncode:
+            record.update(reason='control_worktree_unavailable',error=added.stderr[-1000:]);return record
+        try:
+            for name in ('gold.patch','test.patch'):
+                applied=subprocess.run(['git','apply','--binary','--whitespace=nowarn',str(HARNESS/name)],
+                    cwd=root,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=60)
+                if applied.returncode:
+                    record.update(reason='control_patch_conflict',patch=name,error=applied.stderr[-1000:]);return record
+            # An absolute repository jump would leave the isolated control.
+            script=(HARNESS/'run_script.sh').read_text()
+            if re.search(r'(?:cd|--directory|--cwd)\s+[\"\']?/app(?:/|\b)',script):
+                record.update(reason='control_runner_requires_original_path');return record
+            command=['bash',str(HARNESS/'run_script.sh')]
+            if selected:command.append(','.join(selected))
+            stdout=Path(directory)/'stdout';stderr=Path(directory)/'stderr'
+            with stdout.open('w') as out,stderr.open('w') as err:
+                proc=subprocess.run(command,cwd=root,stdout=out,stderr=err,timeout=300)
+            record.update(runner_exit=proc.returncode,
+                          stdout_tail=stdout.read_text(errors='replace')[-6000:],
+                          stderr_tail=stderr.read_text(errors='replace')[-6000:])
+            output=Path(directory)/'tests.json'
+            parsed=subprocess.run([sys.executable,str(HARNESS/'parser.py'),str(stdout),str(stderr),str(output)],
+                capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=60)
+            if parsed.returncode or not output.is_file():
+                record.update(reason='control_parser_failed');return record
+            tests=json.loads(output.read_text())['tests']
+            passed={str(t['name']) for t in tests if str(t.get('status','')).upper()=='PASSED'}
+            record.update(passed=bool(required) and required<=passed,
+                          required_count=len(required),passed_required_count=len(required & passed),
+                          reason='control_tests_completed',
+                          stdout_sha256=hashlib.sha256(stdout.read_bytes()).hexdigest(),
+                          stderr_sha256=hashlib.sha256(stderr.read_bytes()).hexdigest())
+            return record
+        except (OSError,ValueError,KeyError,subprocess.TimeoutExpired) as exc:
+            record.update(reason='control_execution_unavailable',error=type(exc).__name__);return record
+        finally:
+            run(['git','worktree','remove','--force',str(root)],timeout=60)
+
+
 def check_official_tests(args) -> int:
     spec = json.loads((HARNESS / "task_spec.json").read_text(encoding="utf-8"))
     applied, apply_reason, test_overlay = _apply_hidden_tests(args.base_commit)
@@ -281,14 +346,21 @@ def check_official_tests(args) -> int:
     required = fail_to_pass | pass_to_pass
     observed_required = required & observed
     if required and not observed_required:
-        # A parser can successfully decode a suite-level setup failure (for
-        # example, a root before-all hook) even though none of the required
-        # tests ran.  That is not evidence that the candidate failed every
-        # required test.  Keep the runner output evaluator-only and return an
-        # unknown verdict so the episode is classified as infrastructure
-        # blocked/evaluation invalid instead of as an agent functional failure.
+        combined=runner_stdout+'\n'+runner_stderr
+        control=None
+        if compilation_diagnostics(combined):
+            control=gold_execution_control(args,selected,required)
+            if control['passed']:
+                return emit('fail','official_candidate_compilation_failed',reward=0,
+                    failure_category='candidate_code',required_count=len(required),
+                    observed_required_count=0,parsed_test_count=len(results),
+                    runner_exit=proc.returncode,runner_tail=combined.splitlines()[-30:],
+                    reference_control=control,test_overlay=test_overlay)
+        # No executed required test and no passing reference control: keep the
+        # functional verdict unknown. Signals remain explicit for diagnosis.
         return emit(
             "unknown", "official_required_tests_not_observed",
+            failure_category="test_environment_unavailable",reference_control=control,
             summary_lines=[f"0/{len(required)} required tests were observed by the parser"],
             required_count=len(required), observed_required_count=0,
             parsed_test_count=len(results), runner_exit=proc.returncode,

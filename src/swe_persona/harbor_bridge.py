@@ -7,9 +7,87 @@ import asyncio
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
+import time
 import uuid
+import warnings
 import yaml
+
+
+def remove_empty_session_network(root, project, timeout_sec=10):
+    """Reclaim only this bridge's stopped session, never prune shared Docker."""
+    receipt = {"project": project, "removed": False, "errors": []}
+    if not re.fullmatch(r"(?:sp-harbor-|ds-)[0-9a-f]{12}", project):
+        raise ValueError("Unexpected benchmark compose project")
+    network = project + "_default"
+    started = time.monotonic()
+    deadline = started + timeout_sec
+    try:
+        inspected = subprocess.run(['docker', 'network', 'inspect', network],
+                                   capture_output=True, text=True, timeout=min(5, timeout_sec/2))
+        if inspected.returncode:
+            if any(text in inspected.stderr.lower() for text in
+                   ('no such network', 'not found', 'no such object')):
+                receipt['already_absent'] = True
+            else:
+                receipt['errors'].append('network_inspection_failed')
+        else:
+            details = json.loads(inspected.stdout)[0]
+            labels = details.get('Labels') or {}
+            if labels.get('com.docker.compose.project') != project:
+                receipt['errors'].append('network_owner_mismatch')
+            elif details.get('Containers'):
+                receipt['errors'].append('network_has_live_endpoints')
+            else:
+                # Remove the inspected ID, so a name replaced between inspection
+                # and removal cannot cause us to remove a different network.
+                removed = subprocess.run(['docker', 'network', 'rm', details['Id']],
+                                         capture_output=True, text=True,
+                                         timeout=max(0.001, min(5, deadline-time.monotonic())))
+                receipt['removed'] = removed.returncode == 0
+                if removed.returncode:
+                    receipt['errors'].append('network_removal_failed')
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, IndexError) as exc:
+        receipt['errors'].append(type(exc).__name__)
+    path = Path(root)/'resource-cleanup.json'
+    path.write_text(json.dumps(receipt, indent=2) + '\n')
+    if receipt['errors']:
+        warnings.warn(f'Benchmark session network cleanup incomplete; see {path}', RuntimeWarning)
+    return receipt
+
+
+def cleanup_empty_session_networks(output, timeout_sec=10):
+    """Reclaim networks after a worker exits, including watchdog interruption.
+
+    Inspect only known host-controlled bridge directories, never agent artifacts
+    or unrelated runs. A killed worker cannot run its own normal teardown.
+    """
+    output = Path(output).resolve()
+    deadline = time.monotonic() + timeout_sec
+    receipt = {'sessions': [], 'budget_exhausted': False}
+    for cache in (output/'environments', output/'episode-runtime/environments'):
+        if cache.is_symlink() or not cache.resolve().is_relative_to(output):
+            continue
+        for root in sorted([*cache.glob('harbor-*'), *cache.glob('deepswe-harbor-*')]):
+            if (root.is_symlink() or not root.is_dir()
+                    or not root.resolve().is_relative_to(output)
+                    or not (root/'environment/docker-compose.yaml').is_file()
+                    or not re.fullmatch(r'(?:harbor-|deepswe-harbor-)[0-9a-f]{12}', root.name)):
+                continue
+            remaining = deadline-time.monotonic()
+            if remaining <= 0:
+                receipt['budget_exhausted'] = True
+                break
+            project = ('ds-'+root.name.removeprefix('deepswe-harbor-')
+                       if root.name.startswith('deepswe-harbor-') else 'sp-'+root.name)
+            receipt['sessions'].append(remove_empty_session_network(
+                root, project, timeout_sec=remaining))
+        if receipt['budget_exhausted']:
+            break
+    receipt['elapsed_sec'] = max(0, time.monotonic()-(deadline-timeout_sec))
+    (output/'session-network-cleanup.json').write_text(json.dumps(receipt, indent=2)+'\n')
+    return receipt
 
 def install(dockerx, cache, workdir='/app', sample_labels=False):
     from harbor.environments.docker.docker import DockerEnvironment
@@ -19,6 +97,7 @@ def install(dockerx, cache, workdir='/app', sample_labels=False):
 
     def start(self):
         root=Path(cache)/('harbor-'+uuid.uuid4().hex[:12]);root.mkdir(parents=True)
+        self._harbor_root=root;self._harbor_project='sp-'+root.name
         envdir=root/'environment';envdir.mkdir()
         # All mounts are explicit source-controller assets. Never mount row.json,
         # model configuration, the entire dataset, or host credentials.
@@ -49,7 +128,9 @@ def install(dockerx, cache, workdir='/app', sample_labels=False):
             self._harbor_loop.run_until_complete(launch)
         except BaseException:
             try:self._harbor_loop.run_until_complete(self._harbor_env.stop(delete=False))
-            finally:self._harbor_loop.close()
+            finally:
+                self._harbor_loop.close()
+                remove_empty_session_network(root,self._harbor_project)
             raise
         return subprocess.check_output(['docker','inspect','--format','{{.Id}}',self.name],text=True).strip()
 
@@ -57,7 +138,9 @@ def install(dockerx, cache, workdir='/app', sample_labels=False):
         if not hasattr(self,'_harbor_env'):return original_remove(self)
         if self._harbor_loop.is_closed():return
         try:self._harbor_loop.run_until_complete(self._harbor_env.stop(delete=False))
-        finally:self._harbor_loop.close()
+        finally:
+            self._harbor_loop.close()
+            remove_empty_session_network(self._harbor_root,self._harbor_project)
     dockerx.Container.start=start;dockerx.Container.remove=remove
 
 def _memory_mb(value):

@@ -80,7 +80,7 @@ def _public_evidence(raw: Dict[str, Any]) -> Dict[str, Any]:
     evidence = dict(raw)
     for key in (
         "files", "listing", "failed_tests", "runner_tail", "apply_error",
-        "status_lines", "test_overlay", "judge_audit", "stdout", "stderr",
+        "status_lines", "test_overlay", "judge_audit", "stdout", "stderr", "reference_control",
     ):
         evidence.pop(key, None)
     subcheck = evidence.get("subcheck")
@@ -126,7 +126,7 @@ class CheckerRegistry:
         names = ["checker_driver.py"]
         mounts = []
         if official:
-            names += ["task_spec.json", "test.patch", "run_script.sh", "parser.py"]
+            names += ["task_spec.json", "test.patch", "gold.patch", "run_script.sh", "parser.py"]
         else:
             raw = json.loads((self.assets_dir / "task_spec.json").read_text())
             public = {k: raw.get(k) for k in ("problem_statement", "requirements", "interface")}
@@ -317,6 +317,7 @@ class CheckerRegistry:
         if checker_id == "rubric_judge":
             evidence_key += "+" + transcript_digest((context or {}).get("transcript", []))
             evidence_key += "+" + dockerx.params_digest({"protocol": rubric_checker.GROUNDING_PROTOCOL,
+                "clause_protocol": rubric_checker.CLAUSE_PROTOCOL,
                 "context": context or {}, "commands": self.command_records,
                 "model": getattr(self.judge_llm, "model", None)})
         key = f"{checker_id}@{version}:{dockerx.params_digest(parameters)}:{evidence_key}"
@@ -451,6 +452,7 @@ class CheckerRegistry:
         except rubric_checker.JudgeOutputError as exc:
             return CheckResult("rubric_judge", "1", parameters, "unknown", "judge_output_invalid",
                                {"grounding_protocol": rubric_checker.GROUNDING_PROTOCOL,
+                                "clause_protocol": rubric_checker.CLAUSE_PROTOCOL,
                                 "judge_audit": exc.audit, "invalid_grounding_refs": exc.invalid_refs}, digest)
         except (SchemaRepairFailed, RuntimeError) as exc:
             return CheckResult(

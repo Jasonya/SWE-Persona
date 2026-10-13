@@ -5,13 +5,15 @@ The complete candidate remains in predictions.json; projection is recorded.
 """
 import re
 import subprocess
+import tempfile
 
 
 def paths(patch):
     if not patch.strip():
         return set()
-    result = subprocess.run(['git', 'apply', '--numstat', '-z'], input=patch.encode('utf-8'),
-                            capture_output=True, timeout=20)
+    with tempfile.TemporaryDirectory(prefix='swe-persona-patch-inventory-') as directory:
+        result = subprocess.run(['git', 'apply', '--numstat', '-z'], input=patch.encode('utf-8'),
+                                cwd=directory, capture_output=True, timeout=20)
     if result.returncode:
         raise ValueError('Cannot parse patch paths: ' + result.stderr.decode('utf-8', errors='replace')[:300])
     fields = result.stdout.split(b'\0'); names = set(); index = 0

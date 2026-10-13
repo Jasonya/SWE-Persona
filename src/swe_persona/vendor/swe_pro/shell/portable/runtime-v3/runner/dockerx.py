@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Tuple
 
 def _run(cmd: List[str], timeout: float = 600.0, input_text: Optional[str] = None) -> Tuple[int, str, str]:
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, input=input_text)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, input=input_text)
         return proc.returncode, proc.stdout, proc.stderr
     except subprocess.TimeoutExpired as exc:
         stdout = exc.stdout.decode(errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")

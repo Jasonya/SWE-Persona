@@ -32,11 +32,16 @@ def worker(root,mode,output,config=None,gate=None,time_limit=None):
     env['PYTHONPATH']=str(Path(__file__).parents[1])+os.pathsep+env.get('PYTHONPATH','')
     Path(output).mkdir(parents=True,exist_ok=True)
     with (Path(output)/(mode+'.log')).open('w') as log:
-        if time_limit is None:
-            return subprocess.run(command,env=env,stdout=log,stderr=subprocess.STDOUT).returncode
-        receipt=run_bounded(command,env=env,log=log,seconds=time_limit['effective_sec'])
-        write(Path(output)/'time-limit.json',dict(time_limit,**{'execution':receipt}))
-        return receipt['process_exit_code']
+        try:
+            if time_limit is None:
+                return subprocess.run(command,env=env,stdout=log,stderr=subprocess.STDOUT).returncode
+            receipt=run_bounded(command,env=env,log=log,seconds=time_limit['effective_sec'])
+            write(Path(output)/'time-limit.json',dict(time_limit,**{'execution':receipt}))
+            return receipt['process_exit_code']
+        finally:
+            if mode != 'dry-run':
+                from .harbor_bridge import cleanup_empty_session_networks
+                cleanup_empty_session_networks(output)
 
 def gate_allows_execution(value):
     if value.get('passed') is True:

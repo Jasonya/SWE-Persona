@@ -1,4 +1,5 @@
 """Isolated profile worker. Import names in inherited runtimes cannot collide."""
+import hashlib
 import argparse
 import importlib.util
 import json
@@ -58,6 +59,23 @@ def install_v6(root,config,out):
     os.environ['PCB_AGENT_BASE_URL']=config['agent']['base_url']
     os.environ['PCB_AGENT_API_KEY']=os.environ.get(config['agent']['api_key_env'],'')
 
+def install_native_reference_control(row,destination,fixtures):
+    controls=json.loads((Path(fixtures)/'native-reference-controls.json').read_text())
+    if controls.get('protocol')!='swepro-native-reference-controls-v1':
+        raise ValueError('Unknown native reference control protocol')
+    matches=[c for c in controls['controls'] if c['instance_id']==row['source']['instance_id']]
+    if len(matches)!=1:raise ValueError('Missing or duplicate native reference control')
+    control=matches[0]
+    if control['base_commit']!=row['environment']['expected_base_commit']:
+        raise ValueError('Native reference control base mismatch')
+    for name,key in [('test.patch','test_patch_sha256'),('run_script.sh','runner_sha256'),('parser.py','parser_sha256')]:
+        if hashlib.sha256((destination/name).read_bytes()).hexdigest()!=control[key]:
+            raise ValueError('Native reference control asset mismatch: '+name)
+    reference=control['reference_patch'].encode()
+    if hashlib.sha256(reference).hexdigest()!=control['reference_patch_sha256']:
+        raise ValueError('Native reference patch checksum mismatch')
+    (destination/'gold.patch').write_bytes(reference)
+
 def install_v7(root,row,config,out,calibration=False):
     runner=root/'portable/runtime-v3/runner'
     sys.path.insert(0,str(runner));sys.path.insert(1,str(runner.parent))
@@ -87,7 +105,8 @@ def install_v7(root,row,config,out,calibration=False):
     if calibration:return
     configure_verifier_parallelism(row,dockerx,out)
     # Ordinary evaluation consumes assets from the selected Parquet row; no HF
-    # dataset download, author's cache, source checkout, or gold patch is needed.
+    # dataset download, author's cache or source checkout is needed. Reference
+    # controls are packaged separately and mounted only for native diagnosis.
     import task_adapter
     short=row['source']['task_id'];tests=root/'tasks'/short/'tests'
     spec=json.loads((tests/'task_spec.json').read_text())
@@ -110,7 +129,13 @@ def install_v7(root,row,config,out,calibration=False):
         destination=Path(destination);destination.mkdir(parents=True,exist_ok=True)
         for p in tests.iterdir():
             if p.is_file():shutil.copy2(p,destination/p.name)
-        # Execution never consumes a gold solution. Keep source schema compatibility.
+        # Frozen row assets hold test scripts/data. Executable checker logic
+        # comes from this runtime, including failure classification repairs.
+        shutil.copy2(Path(fixtures)/'checker_driver.py',destination/'checker_driver.py')
+        install_native_reference_control(row,destination,fixtures)
+        hashes={name:hashlib.sha256((destination/name).read_bytes()).hexdigest()
+                for name in ('run_script.sh','parser.py','checker_driver.py','task_spec.json')}
+        write(destination/'asset_hashes.json',hashes)
         return destination
     task_adapter.TaskManifest.materialize_checker_assets=materialize
 

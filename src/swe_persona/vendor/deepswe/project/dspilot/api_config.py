@@ -100,6 +100,7 @@ def config(path: Path | None = None, *, environ=None) -> dict[str, str]:
             'HTTP_TIMEOUT_SECONDS': pick(prefix + '_HTTP_TIMEOUT_SECONDS') or '300',
             'REQUEST_OPTIONS_JSON': pick(prefix + '_REQUEST_OPTIONS_JSON') or '{}',
             'STRUCTURED_OUTPUT_MODE': pick(prefix + '_STRUCTURED_OUTPUT_MODE') or pick('STRUCTURED_OUTPUT_MODE') or 'json_schema',
+            'STRUCTURED_OUTPUT_FALLBACK': pick(prefix + '_STRUCTURED_OUTPUT_FALLBACK') or pick('STRUCTURED_OUTPUT_FALLBACK') or 'true',
             'MAX_TOKENS_FIELD': pick(prefix + '_MAX_TOKENS_FIELD') or pick('MAX_TOKENS_FIELD') or 'max_completion_tokens',
         }
         for key in ('MODEL', 'API_BASE_URL', 'API_KEY'):
@@ -107,6 +108,8 @@ def config(path: Path | None = None, *, environ=None) -> dict[str, str]:
                 raise ValueError(f'Missing {prefix}_{key}; configure the role or provider default (values withheld)')
         if values['STRUCTURED_OUTPUT_MODE'] not in ('json_schema', 'json_object', 'prompt'):
             raise ValueError(prefix + '_STRUCTURED_OUTPUT_MODE must be json_schema, json_object, or prompt')
+        if values['STRUCTURED_OUTPUT_FALLBACK'] not in ('true','false'):
+            raise ValueError(prefix + '_STRUCTURED_OUTPUT_FALLBACK must be true or false')
         if values['API_MODE'] not in ('responses', 'chat_completions'):
             raise ValueError(prefix + '_API_MODE must be responses or chat_completions')
         if values['REASONING_EFFORT'] not in ('inherit', 'omit', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'):
@@ -134,7 +137,7 @@ def role_config(values, role):
                 ('MODEL', values.get('AGENT_MODEL')),
                 ('API_PROVIDER', 'azure'), ('API_MODE', 'responses'),
                 ('API_BASE_URL', None), ('API_KEY', None),
-                ('HTTP_TIMEOUT_SECONDS', '300'), ('REQUEST_OPTIONS_JSON', '{}'), ('STRUCTURED_OUTPUT_MODE', 'json_schema'), ('REASONING_EFFORT', 'inherit'), ('MAX_TOKENS_FIELD', 'max_completion_tokens'))}
+                ('HTTP_TIMEOUT_SECONDS', '300'), ('REQUEST_OPTIONS_JSON', '{}'), ('STRUCTURED_OUTPUT_MODE', 'json_schema'), ('STRUCTURED_OUTPUT_FALLBACK','true'), ('REASONING_EFFORT', 'inherit'), ('MAX_TOKENS_FIELD', 'max_completion_tokens'))}
 
 
 def public_routes(values):
@@ -143,7 +146,7 @@ def public_routes(values):
     for role in ROLES:
         route = role_config(values, role)
         routes[role] = {k.lower(): route[k] for k in
-                       ('MODEL', 'API_PROVIDER', 'API_MODE', 'REASONING_EFFORT', 'MAX_TOKENS_FIELD', 'STRUCTURED_OUTPUT_MODE', 'REQUEST_OPTIONS_JSON', 'HTTP_TIMEOUT_SECONDS')}
+                       ('MODEL', 'API_PROVIDER', 'API_MODE', 'REASONING_EFFORT', 'MAX_TOKENS_FIELD', 'STRUCTURED_OUTPUT_MODE', 'STRUCTURED_OUTPUT_FALLBACK', 'REQUEST_OPTIONS_JSON', 'HTTP_TIMEOUT_SECONDS')}
         routes[role]['endpoint_sha256'] = hashlib.sha256(
             (route['API_BASE_URL'] or '').rstrip('/').encode()).hexdigest()
     return routes

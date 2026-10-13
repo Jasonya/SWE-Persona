@@ -124,6 +124,29 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(summary['status_counts'], {'dry_run_pass': 8, 'infrastructure_error': 1})
         self.assertEqual(summary['attempted'], 9)
 
+    def test_drain_finishes_active_tasks_without_interrupting_or_launching_queue(self):
+        handlers={};barrier=threading.Barrier(4);calls=[]
+        def register(sig,handler):
+            previous=handlers.get(sig);handlers[sig]=handler;return previous
+        def command(argv,log,interrupted):
+            if 'calibrate' in argv:return 0
+            task=argv[argv.index('--task')+1];calls.append(task)
+            barrier.wait(timeout=5)
+            handlers[batch.signal.SIGUSR1](batch.signal.SIGUSR1,None)
+            self.assertFalse(interrupted.is_set())
+            out=Path(argv[argv.index('--output')+1]);out.mkdir()
+            (out/'result.json').write_text(json.dumps({'task_id':task,'status':'pass'}))
+            return 0
+        with patch.object(batch.signal,'signal',side_effect=register), \
+                patch.object(batch,'run_command',side_effect=command):
+            self.assertEqual(batch.evaluate(self.args,self.rows),2)
+        summary=json.loads((self.output/'summary.json').read_text())
+        self.assertEqual(len(calls),4)
+        self.assertEqual(summary['attempted'],4)
+        self.assertEqual(summary['running'],0)
+        self.assertTrue(summary['stopped'])
+        self.assertEqual(summary['status_counts'],{'pass':4})
+
 
 if __name__ == '__main__':
     unittest.main()
