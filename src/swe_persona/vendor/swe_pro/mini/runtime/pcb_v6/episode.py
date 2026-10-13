@@ -234,6 +234,8 @@ class Episode:
             reply = self._agent_turn(self.task.original_instruction, 1, interactive=False)
             transcript.append({"event_id": "a-1", "role": "agent", "turn": 1,
                                "text": reply.text, "status": reply.status})
+            if reply.status == 'api_interrupted':
+                end_state = 'api_interrupted'
         except AgentTimeout:
             end_state = "time_limit_exceeded"
         except AgentFailure as exc:
@@ -253,6 +255,9 @@ class Episode:
             while True:
                 reply = self._agent_turn(message, turn, interactive=True)
                 controller.add_agent_message(reply.text, turn, reply.status)
+                if reply.status == 'api_interrupted':
+                    controller.end_state = 'api_interrupted'
+                    break
                 for item in controller.needs_judgment(turn):
                     if self.budget.remaining() <= 0:
                         raise AgentTimeout("budget exhausted during online judging")
@@ -290,7 +295,8 @@ class Episode:
             controller.end_state = "protocol_error"
             self.errors.append(f"judge: {exc}")
         except LlmError as exc:
-            controller.end_state = "infrastructure_error"
+            from swe_persona.api_recovery import is_api_interruption
+            controller.end_state = 'api_interrupted' if is_api_interruption(exc) else "infrastructure_error"
             self.errors.append(f"llm: {exc}")
         return {"end_state": controller.end_state, "transcript": controller.transcript,
                 "controller": controller}
@@ -383,6 +389,18 @@ class Episode:
     def _write_results(self, run, original, checker, budget_used, quiesce) -> Dict[str, Any]:
         controller: Optional[Controller] = run.get("controller")
         outcome = benchmark_outcome(self.condition, run["end_state"], original, checker)
+        if run['end_state'] == 'api_interrupted':
+            from swe_persona.api_recovery import assess_interrupted
+            frozen = self.out / 'agent-private' / 'frozen' / 'final.patch'
+            progress = frozen.exists() and bool(frozen.read_text().strip()) or any(
+                item.get('role') == 'agent' and item.get('text','').strip() for item in run['transcript'])
+            statuses = [item.get('status') for item in (checker or {}).get('requirements',{}).values()]
+            persona = False if 'fail' in statuses else True if statuses and all(s == 'pass' for s in statuses) else None
+            if self.condition == 'single_turn': persona = True
+            native = original['status'] == 'pass' if original.get('status') in ('pass','fail') else None
+            assessment = assess_interrupted(native,persona,artifacts_available=(self.frozen or {}).get('ok') is True,
+                                            progress=progress,budget_exhausted=budget_used.get('used_sec',0)>=budget_used.get('timeout_sec',float('inf')))
+            outcome = dict(assessment,outcome=assessment['status'])
         stalled = (quiesce or {}).get("seconds_since_progress")
         if run["end_state"] == "time_limit_exceeded" and stalled is not None and stalled > STALL_LIMIT_SEC:
             outcome = {"outcome": "infrastructure_error", "reason": f"agent_no_progress_for_{int(stalled)}s"}
@@ -400,6 +418,7 @@ class Episode:
             "original": original,
             "checker": checker,
             "benchmark_outcome": outcome["outcome"],
+            "api_recovery_assessment": outcome if run['end_state'] == 'api_interrupted' else None,
             "outcome_reason": outcome["reason"],
             "budget": budget_used,
             "timing_sec": self.timing.seconds,

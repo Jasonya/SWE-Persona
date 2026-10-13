@@ -19,13 +19,20 @@ from .api import RoleAPI, load_config, fingerprint
 from .binding import validate, PILOT
 from .evaluation import seal_evidence, artifact_snapshot
 from .simulator import UserSimulator, initial_persona_message
+from swe_persona.api_recovery import assess_interrupted, is_api_interruption
+from swe_persona.agent_output import action_envelope
 
 PROFILE='swe-together'
 AGENT_SCHEMA={'type':'object','additionalProperties':False,'properties':{
     'action':{'type':'string','enum':['command','message']},
     'content':{'type':'string'},'completion_claim':{'type':'boolean'}},
     'required':['action','content','completion_claim']}
-AGENT_PROMPT='''You are a coding agent working in an isolated repository. Respond only with a JSON object containing action (command or message), content (shell command or user-facing message), and completion_claim (boolean). Use command to inspect, edit and test. Shell commands run in the repository working directory; cwd changes do not persist between commands. Use message to ask the user a question, explain a plan or deliver results. Mark completion_claim true only when claiming completion. Follow the user's scope and authorization boundaries. The user may disclose additional requirements at checkpoints. Only actual command outputs establish that a check ran. Do not inspect evaluator assets or attempt to alter the evaluator. Do not claim to have committed, pushed or opened a PR without doing so and being authorized. Give a user-facing progress message after at most 8 shell commands.'''
+AGENT_PROMPT=action_envelope(AGENT_SCHEMA,[
+    {'action':'command','content':'pwd','completion_claim':False},
+    {'action':'message','content':'I will follow the current task requirements and permissions.','completion_claim':False}], {
+    'action':'Choose command or message. command runs content as one shell script in the repository working directory; cwd changes do not persist between commands. message delivers content to the user without running a command.',
+    'content':'Always a JSON string. For command, put the script here. For message, put the complete user-facing plan, question, status or handoff here.',
+    'completion_claim':'Always a JSON boolean. Use false for inspection, a plan, a question or progress. Use true only with action=message when claiming the work is complete. This is a claim for controller review, not final benchmark acceptance.'})+'''You are a coding agent working in an isolated repository. Respond only with a JSON object containing action (command or message), content (shell command or user-facing message), and completion_claim (boolean). Use command to inspect, edit and test. Shell commands run in the repository working directory; cwd changes do not persist between commands. Use message to ask the user a question, explain a plan or deliver results. Mark completion_claim true only when claiming completion. Follow the user's scope and authorization boundaries. The user may disclose additional requirements at checkpoints. Only actual command outputs establish that a check ran. Do not inspect evaluator assets or attempt to alter the evaluator. Do not claim to have committed, pushed or opened a PR without doing so and being authorized. Give a user-facing progress message after at most 8 shell commands.'''
 COLLECT='''import json,pathlib,subprocess
 base='__FROZEN_BASE_COMMIT__'
 root=pathlib.Path.cwd()
@@ -60,7 +67,7 @@ class Calls:
     def __init__(self,config,out,deadline=None):self.config=config;self.out=out;self.deadline=deadline
     async def __call__(self,role,system,payload):
         name='user_simulator' if role=='user_simulator' else 'judge'
-        timeout=float(self.config[name].get('timeout_sec',120))
+        timeout=3*float(self.config[name].get('timeout_sec',120))+3
         if self.deadline is not None:timeout=min(timeout,max(.1,self.deadline-time.monotonic()))
         def invoke():
             api=RoleAPI(self.config,name,self.out/'api')
@@ -124,6 +131,7 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
         'binding_sha256':binding['binding_sha256'],'runtime_sha256':runtime_hash(),
         'api_config_sha256':fingerprint(config),'docker_image_id':image_id,'original_reward':None,
         'benchmark_outcome':'infrastructure_error','persona_check':{},'cpu_only':True}
+    final_artifacts_ready=False
     try:
         await asyncio.wait_for(env.start(force_build=False),timeout=600)
         init=await env.exec('git -c safe.directory='+shlex.quote(workdir)+' rev-parse HEAD && git -c safe.directory='+shlex.quote(workdir)+' update-ref refs/tags/SWT_BASE HEAD',cwd=workdir,timeout_sec=30)
@@ -154,7 +162,7 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
                 from jsonschema import ValidationError
                 request=list(conversation)
                 for attempt in range(3):
-                    try:return await asyncio.to_thread(api.json,request,AGENT_SCHEMA,'agent_action',16000,max(.1,min(float(config['agent'].get('timeout_sec',120)),deadline-time.monotonic())))
+                    try:return await asyncio.to_thread(api.json,request,AGENT_SCHEMA,'agent_action',16000,max(.1,deadline-time.monotonic()))
                     except (APIConnectionError,RateLimitError,InternalServerError):
                         if attempt==2 or time.monotonic()>=deadline:raise
                         await asyncio.sleep(min(2**attempt,max(0,deadline-time.monotonic())))
@@ -167,6 +175,9 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
             if remaining<=0:stop='episode_timeout';break
             try:action=await asyncio.wait_for(code_call(),remaining)
             except asyncio.TimeoutError:stop='episode_timeout';break
+            except Exception as exc:
+                if not is_api_interruption(exc):raise
+                stop='api_interrupted';result.update(api_interrupted=True,api_error_type=type(exc).__name__);break
             conversation.append({'role':'assistant','content':json.dumps(action,ensure_ascii=False)})
             if action['action']=='command':
                 before=await evidence()
@@ -196,14 +207,25 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
                     'completion_attempt':action['completion_claim'],'interaction_checkpoint':True,
                     'remaining_agent_turns':max_steps-step-1,'evidence':ev}),max(.1,deadline-time.monotonic()))
             except asyncio.TimeoutError:stop='episode_timeout';break
+            except Exception as exc:
+                if not is_api_interruption(exc):raise
+                stop='api_interrupted';result.update(api_interrupted=True,api_error_type=type(exc).__name__);break
             write(out/'persona-turns.json',sim.records)
+            if decision['action']=='assessment_unavailable':
+                stop='online_judge_unavailable';result['online_judge_unavailable']=True;break
             if decision['action']=='accept' and sim.user_accepted:stop='user_accepted';break
             conversation.append({'role':'user','content':decision['content'] if decision['action']=='message' else '[The user is temporarily silent. Continue the authorized task.]'})
         coding_elapsed=seconds-max(0,deadline-time.monotonic())
         # Finalization and native verification are explicitly outside coding time.
         calls.deadline=time.monotonic()+180
         ev=await evidence();write(out/'persona-evidence.json',ev)
-        summary=await asyncio.wait_for(sim.finish(ev),180)
+        final_artifacts_ready=True
+        try:summary=await asyncio.wait_for(sim.finish(ev),180)
+        except Exception as exc:
+            if not is_api_interruption(exc):raise
+            result.update(api_interrupted=True,api_error_type=type(exc).__name__)
+            summary={'persona_status':'unknown','evaluation_valid':False,'requirements':[],
+                     'user_accepted':sim.user_accepted,'error_type':type(exc).__name__}
         write(out/'persona-summary.json',summary);write(out/'transcript.json',sim.history)
         # Stop the agent and its background processes. Grade a snapshot in a
         # fresh container with read-only protected tests, never in the live sandbox.
@@ -235,13 +257,42 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
                 if snapshot is not None:client.images.remove(snapshot.id,force=True)
                 client.close()
         reward=await asyncio.to_thread(verify_snapshot)
+        result['original_reward']=reward
         met=summary['persona_status']=='met';valid=summary['evaluation_valid']
         status='pass' if reward==1 and met and valid else 'invalid' if not valid else 'fail'
+        if result.get('api_interrupted') or result.get('online_judge_unavailable') or any(r.get('api_interrupted') for r in summary.get('requirements',[])):
+            progress = any(item.get('role') == 'agent' and item.get('text','').strip() for item in sim.history)
+            progress = progress or any(item.get('ref') != 'host:execution_index' and
+                item.get('text','').strip() not in ('','(no changes)') for item in ev['artifacts'])
+            final_requirements={r['requirement_id']:r for r in summary.get('requirements',[])}
+            states=[final_requirements.get(r['id'],{}).get('status')
+                    for r in binding['persona']['bound_evolved_requirements']]
+            missing=summary.get('undisclosed',[])
+            persona = (False if 'not_met' in states or missing else
+                       True if met and valid and states and all(s=='met' for s in states) else None)
+            assessment = assess_interrupted(reward==1,persona,artifacts_available=True,progress=progress,
+                                            budget_exhausted=coding_elapsed>=seconds,
+                                            integrity=not summary.get('invalid_reasons')
+                                            and not summary.get('base_verifier_modified'))
+            if result.get('online_judge_unavailable'):
+                assessment.update(api_interrupted=False,online_judge_unavailable=True,
+                    outcome_reason='online_judge_unavailable',policy='registered-refs-internal-recovery-v2')
+            status=assessment['status'];result['api_recovery_assessment']=assessment
         result.update(original_reward=reward,benchmark_outcome=status,stop_reason=stop,
             persona_check={'status':'pass' if met else 'fail' if summary['persona_status']=='not_met' else 'unknown'},
             persona_status=summary['persona_status'],user_accepted=summary['user_accepted'],
             elapsed_coding_sec=coding_elapsed,native_verifier_exit_code=0)
-    except Exception as exc:result.update(error_type=type(exc).__name__,error=str(exc)[:1500])
+    except Exception as exc:
+        result.update(error_type=type(exc).__name__,error=str(exc)[:1500])
+        if result.get('api_interrupted') or is_api_interruption(exc):
+            progress=any(item.get('role')=='agent' and item.get('text','').strip() for item in getattr(locals().get('sim'),'history',[]))
+            saved=locals().get('ev',{})
+            progress=progress or any(item.get('ref')!='host:execution_index' and item.get('text','').strip() not in ('','(no changes)')
+                for item in saved.get('artifacts',[]))
+            native=result['original_reward']==1 if result['original_reward'] is not None else None
+            assessment=assess_interrupted(native,None,artifacts_available=final_artifacts_ready,progress=progress,
+                budget_exhausted=locals().get('coding_elapsed',0)>=seconds)
+            result.update(benchmark_outcome=assessment['status'],api_recovery_assessment=assessment)
     finally:
         try:await asyncio.wait_for(env.stop(delete=True),60)
         except Exception as exc:result['cleanup_error']=type(exc).__name__

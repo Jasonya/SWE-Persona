@@ -54,6 +54,7 @@ def install_v6(root,config,out):
     os.environ['OPENAI_BASE_URL']=config['judge']['base_url']
     os.environ['OPENAI_API_KEY']=os.environ.get(config['judge']['api_key_env'],'')
     os.environ['SWE_PERSONA_AGENT_REQUEST_OPTIONS']=json.dumps(chat_token_options(config['agent']))
+    os.environ['SWE_PERSONA_AGENT_HTTP_TIMEOUT']=str(config['agent'].get('timeout_sec',120))
     os.environ['PCB_AGENT_BASE_URL']=config['agent']['base_url']
     os.environ['PCB_AGENT_API_KEY']=os.environ.get(config['agent']['api_key_env'],'')
 
@@ -77,8 +78,7 @@ def install_v7(root,row,config,out,calibration=False):
             self._sp_role=aliases.get(model,'judge')
             old_init(self,model,*args,**kwargs)
         def response(self,messages,max_output_tokens,schema,schema_name):
-            data=RoleAPI(config,self._sp_role,out/'api').raw(messages,schema,schema_name,max_output_tokens,
-                                                                     float(config[self._sp_role].get('timeout_sec',120)))
+            data=RoleAPI(config,self._sp_role,out/'api').raw(messages,schema,schema_name,max_output_tokens)
             return data['text'],(data['input_tokens'],data['output_tokens']),{}
         base.Llm.__init__=init;base.Llm._azure_responses=response
     import dockerx
@@ -202,6 +202,9 @@ def main():
         if args.mode=='dry-run':
             case,runtime,binding,candidates=entry.prepare(case_id)
             print(json.dumps({'task_id':row['task_id'],'status':'pass','requirements':len(candidates),
+                              'requirements_expected':len(row['requirements']),
+                              'loaded_requirement_ids':[c.requirement_id for c in candidates],
+                              'requirement_loader':'registry.build_candidates + applicable_candidates',
                               'backend':'harbor-docker','profile':profile}));return 0
         prepare_public_submodules(row,out)
         if args.gate_dir:os.environ['PCB_RUBRIC_GATE_DIR']=str(args.gate_dir.resolve())

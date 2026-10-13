@@ -202,6 +202,12 @@ def episode(run_id, arm, client_factory=Client, *, box_factory=None, backend_fac
                 disclosures.setdefault(key,event['event_id'])
 
     def user_message(target, receipt, *, opening=False, previous=None, focus_ids=()):
+        # A disclosed explanation needs its public observations before rendering,
+        # even while final-quality acceptance is still pending a done action.
+        if pivot:
+            from .simulator_evidence import collect_explanation_evidence
+            collect_explanation_evidence(target, requirements, BINDING_SPEC.public_probes,
+                                         snapshot, trusted, bases, probe_cache, out, public_probe)
         environment_permissions=permissions(target)
         remaining_budget={'user_turns':budgets['max_user_turns']-turn,
                           'actions':budgets['max_actions']-actions}
@@ -212,6 +218,12 @@ def episode(run_id, arm, client_factory=Client, *, box_factory=None, backend_fac
             f'{remaining_budget["actions"]} agent actions and '
             f'{remaining_budget["user_turns"]} user turns remain in this episode, '
             'including this turn. These are episode-wide limits.']
+        if ('required_event_not_observed' in receipt.get('reasons', [])
+                and receipt.get('expected_event') in ('completion_claim','final_delivery')):
+            required.append('Completion is recorded only by an action with action="reply" and phase="done". '
+                'A completion statement in a working-phase reply does not record that event. '
+                'If the currently disclosed work is complete, use that done action for your reply; '
+                'otherwise continue the currently authorized work. This does not waive any verification requirement.')
         if opening and pivot and delivery_blur:
             required.append(delivery_blur['blur']['opening'])
         if pivot and opening and PERSONA['id']=='first_time_pr_contributor':
@@ -254,6 +266,9 @@ def episode(run_id, arm, client_factory=Client, *, box_factory=None, backend_fac
             'public_probe_results':user_simulator.public_probe_results(trusted) if pivot else {},
             'public_baseline_probe_results':user_simulator.public_baseline_probe_results(bases,requirements,target.disclosed,BASE) if pivot else {},
             'controller_receipt':receipt,'focus_ids':list(focus_ids),
+            'completion_event':{'observed':completion_claim,
+                'required_action':{'action':'reply','phase':'done'},
+                'meaning':'Completion is a structured action event. Prose claiming completion in a working-phase reply does not emit it; do not claim that such prose was absent.'},
             'task_disclosed':task_visible,
             'task_disclosure_mode':plan['task_disclosure_mode'] if staged_interaction else 'full_at_start',
             'full_task_disclosed':target.full_task_disclosed if staged_interaction else True,
@@ -521,6 +536,9 @@ def episode(run_id, arm, client_factory=Client, *, box_factory=None, backend_fac
         if isinstance(exc,user_simulator.SimulatorMessageError): reason='simulator_message_error'
         if isinstance(exc,CodingBudgetExceeded): reason='coding_time_budget_exhausted'; error=None
         if reason=='interaction_budget_exhausted': error=None
+        from swe_persona.api_recovery import is_api_interruption
+        api_interrupted=is_api_interruption(exc)
+        if api_interrupted: reason='api_interrupted'
     if interaction_end is None: interaction_end=time.monotonic()
     timings['coding_execution_seconds']=coding_budget.spent
     dump(out/'coding-budget.json',coding_budget.receipt())
@@ -544,6 +562,7 @@ def episode(run_id, arm, client_factory=Client, *, box_factory=None, backend_fac
         except Exception as exc: final_error=client.redact(f'Official evaluation: {type(exc).__name__}: {exc}')
         timings['official_seconds']=time.monotonic()-t
     online=copy.deepcopy(checks)
+    api_interrupted=locals().get('api_interrupted',False)
     if pivot and snapshot is not None:
         t=time.monotonic()
         # Separate finite final-review client: no feedback or extra agent work.
@@ -556,6 +575,8 @@ def episode(run_id, arm, client_factory=Client, *, box_factory=None, backend_fac
             for k,v in controller.permanent.items(): checks[k]=v
             dump(out/'final-review-status.json', {'status':'completed'})
         except Exception as exc:
+            from swe_persona.api_recovery import is_api_interruption
+            api_interrupted=api_interrupted or is_api_interruption(exc)
             if isinstance(exc,JudgeOutputError): dump(out/'final-judge-error-audit.json',exc.audit)
             if not (out/'final-review-status.json').exists():
                 dump(out/'final-review-status.json', {'status':'failed', 'error_type':type(exc).__name__})
@@ -581,6 +602,15 @@ def episode(run_id, arm, client_factory=Client, *, box_factory=None, backend_fac
         elif all(v=='met' for v in states.values()): persona_pass=True
     persona_exclusion=admission.get('persona_evaluation_exclusion')
     joint=(base_pass and persona_pass) if pivot and original_eligible and persona_valid and not persona_exclusion else None
+    api_recovery_assessment=None
+    if locals().get('api_interrupted'):
+        from swe_persona.api_recovery import assess_interrupted
+        progress=bool(snapshot and snapshot.get('patch','').strip()) or any(
+            item.get('speaker')=='agent' and item.get('content','').strip() for item in turns)
+        api_recovery_assessment=assess_interrupted(base_pass if original_valid else None,persona_pass,
+            artifacts_available=snapshot is not None,progress=progress,
+            integrity=excluded is None and not controller.environment_violations and not persona_exclusion,
+            budget_exhausted=coding_budget.exhausted or bool(client.deadline and interaction_end>=client.deadline))
     coverage=template_coverage(plan)
     full_coverage=all(row['implemented'] for row in coverage)
     controller.end_reason=reason
@@ -621,6 +651,7 @@ def episode(run_id, arm, client_factory=Client, *, box_factory=None, backend_fac
         'evaluation_valid':original_valid and (persona_valid if pivot else True) and error is None,
         'integrity':official.get('integrity') if official else None,'end_reason':reason,
         'budget_exhausted':'budget_exhausted' in (reason or ''),'error':error,'final_error':final_error,
+        'api_recovery_assessment':api_recovery_assessment,
         'stage':controller.summary() if staged_interaction else None,'final_delivery':controller.final_delivery if staged_interaction else final_delivery,
         'actions':actions,'tool_actions':tool_actions,'agent_replies':agent_replies,
         'rejected_agent_responses':len(rejected_agent_responses),
@@ -628,6 +659,7 @@ def episode(run_id, arm, client_factory=Client, *, box_factory=None, backend_fac
         'agent_response_retries_per_action':backend.metadata.get('max_transport_retries_per_action'),
         'user_message_source':'user_simulator',
         'simulator_message_attempts':sum(r['operation']=='render' for r in simulator_audit),
+        'simulator_message_recoveries':[r for r in simulator_audit if r['operation']=='message_recovery'],
         'controller_rejections':sum(e['event']=='progression_rejected' for e in controller.events) if pivot else 0,
         'persona_measurement':({'met':sum(v=='met' for v in states.values()),'total_bound':len(states),
             'source_templates':len(coverage),'pending_templates':sum(r['status']=='pending_fixture' for r in coverage),

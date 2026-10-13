@@ -13,6 +13,8 @@ from pathlib import Path
 from .api_config import config, role_config, public_routes
 from .api_codec import chat_payload, chat_response
 from .coding_budget import bounded_timeout
+from swe_persona.api_recovery import APITransportExhausted, append_audit, retry_transport
+from swe_persona.api_output import POLICY as OUTPUT_POLICY, OutputBudget, configured_limit
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,6 +32,21 @@ class Client:
         self.deadline = deadline
         self.calls = 0
         self.usage = {'input_tokens': 0, 'output_tokens': 0, 'cached_tokens': 0}
+        self._output_ceiling = {}
+
+    def output_budget(self, *, role='agent', schema=None, max_output_tokens=None, effort='medium'):
+        route = role_config(self.cfg, role)
+        configured_effort = route['REASONING_EFFORT']
+        effective_effort = effort if configured_effort == 'inherit' else (
+            None if configured_effort == 'omit' else configured_effort)
+        return OutputBudget.resolve(adaptive=role == 'agent' and schema is not None,
+            effort=effective_effort, configured=configured_limit(json.loads(route['REQUEST_OPTIONS_JSON'])),
+            requested=max_output_tokens, ceiling=self._output_ceiling.get(role))
+
+    def request_deadline(self, role='agent', *, started=None):
+        started = time.monotonic() if started is None else started
+        deadline = started + 3*float(role_config(self.cfg,role)['HTTP_TIMEOUT_SECONDS']) + 3
+        return min(deadline,self.deadline) if self.deadline is not None else deadline
 
     def redact(self, text: str) -> str:
         secrets = [(v, '[REDACTED]' if k.endswith('API_KEY') else '[API_ENDPOINT]')
@@ -38,7 +55,7 @@ class Client:
             text = text.replace(value, marker)
         return text
 
-    def create(self, messages, *, role='agent', max_output_tokens=4096, tools=None, schema=None, effort='medium', tool_choice=None, _retry=0):
+    def create(self, messages, *, role='agent', max_output_tokens=None, tools=None, schema=None, effort='medium', tool_choice=None, _retry=0, _budget=None, _deadline=None):
         if self.calls >= self.max_calls or (self.deadline and time.monotonic() >= self.deadline):
             raise ApiFailure('API call or episode time budget exhausted')
         if role == 'agent': bounded_timeout(300)
@@ -47,6 +64,9 @@ class Client:
         configured_effort = route['REASONING_EFFORT']
         effective_effort = effort if configured_effort == 'inherit' else (
             None if configured_effort == 'omit' else configured_effort)
+        budget = _budget if _budget is not None else self.output_budget(
+            role=role, schema=schema, max_output_tokens=max_output_tokens, effort=effort)
+        max_output_tokens = budget.current
         mode = route['API_MODE']
         if mode == 'chat_completions':
             payload = chat_payload(messages, model=model, max_output_tokens=max_output_tokens,
@@ -79,6 +99,7 @@ class Client:
             raise ValueError('Unsupported request options')
         extra=options.pop('extra_body',{})
         if not isinstance(extra,dict) or set(extra)-{'thinking'}:raise ValueError('Only thinking is supported in extra_body')
+        for field in ('max_tokens', 'max_completion_tokens', 'max_output_tokens'):options.pop(field,None)
         payload.update(options);payload.update(extra)
         headers = {'Content-Type': 'application/json'}
         if route['API_PROVIDER'] == 'azure':
@@ -88,14 +109,14 @@ class Client:
         else:
             raise ValueError('Unsupported API provider')
         url = route['API_BASE_URL'].rstrip('/') + suffix
-        req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method='POST')
         metadata = public_routes(self.cfg)[role]
         started = time.monotonic()
-        self.calls += 1
         timeout=float(route['HTTP_TIMEOUT_SECONDS'])
         if not __import__('math').isfinite(timeout) or timeout<=0:raise ValueError('Invalid role HTTP timeout')
         timeout = min(timeout, max(1, self.deadline-started)) if self.deadline else timeout
         if role == 'agent': timeout = bounded_timeout(timeout)
+        deadline = self.request_deadline(role,started=started)
+        if _deadline is not None:deadline = min(deadline,_deadline)
         def retry_or_fail(message, transient):
             if self.log:
                 self.log.parent.mkdir(parents=True,exist_ok=True)
@@ -104,44 +125,64 @@ class Client:
                       'api_route':metadata,
                       'seconds':round(time.monotonic()-started,3),'status':'error','usage':{},
                       'error':message,'retry':_retry,'usage_unknown':True})+'\n')
-            if transient and _retry<1:
-                # No tool action is executed until a complete response is returned.
-                return self.create(messages,role=role,max_output_tokens=max_output_tokens,tools=tools,
-                                   schema=schema,effort=effort,tool_choice=tool_choice,_retry=_retry+1)
             raise ApiFailure(message) from None
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                result = json.load(resp)
-        except urllib.error.HTTPError as exc:
+        def request(seconds):
+            if self.calls >= self.max_calls:
+                raise ApiFailure('API call budget exhausted')
+            self.calls += 1
+            if role == 'agent': seconds = bounded_timeout(seconds)
+            req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method='POST')
+            with urllib.request.urlopen(req, timeout=seconds) as resp:
+                return json.load(resp)
+        def audit(record):
+            if self.log:
+                append_audit(self.log, dict(record,call=self.calls,role=role,model=model,api_route=metadata))
+        token_field = route['MAX_TOKENS_FIELD'] if mode == 'chat_completions' else 'max_output_tokens'
+        while True:
+            payload[token_field] = budget.current
             try:
-                error = json.loads(exc.read()).get('error', {})
-                code = self.redact(str(error.get('code', 'unknown')))[:80]
-                message = self.redact(str(error.get('message', '')))[:600]
-            except Exception:
-                code, message = 'unparsed_error', 'response body withheld'
-            return retry_or_fail(f'HTTP {exc.code}; code={code}; {message}',exc.code==429 or exc.code>=500)
-        except Exception as exc:
-            return retry_or_fail(f'API transport failed: {type(exc).__name__}; details withheld',True)
-        try:
-            if not isinstance(result, dict):
-                raise ValueError('Expected a JSON response object')
-            if mode == 'chat_completions':
-                result = chat_response(result)
-        except (ValueError, KeyError, TypeError) as exc:
-            return retry_or_fail('Invalid API response shape; no action executed (' + type(exc).__name__ + ')', False)
-        usage = result.get('usage') or {}
-        self.usage['input_tokens'] += usage.get('input_tokens', 0)
-        self.usage['output_tokens'] += usage.get('output_tokens', 0)
-        self.usage['cached_tokens'] += (usage.get('input_tokens_details') or {}).get('cached_tokens', 0)
-        record = {'call': self.calls, 'role': role, 'model': model, 'effort': effective_effort,
-                  'api_route': metadata,
-                  'seconds': round(time.monotonic()-started, 3), 'usage': usage,
-                  'status': result.get('status'), 'incomplete_details': result.get('incomplete_details')}
-        if self.log:
-            self.log.parent.mkdir(parents=True, exist_ok=True)
-            with self.log.open('a') as f:
-                f.write(self.redact(json.dumps(record))+'\n')
-        return result
+                result = retry_transport(request,request_timeout=timeout,deadline=deadline,audit=audit)
+            except (APITransportExhausted, ApiFailure):
+                raise
+            except urllib.error.HTTPError as exc:
+                try:
+                    error = json.loads(exc.read()).get('error', {})
+                    code = self.redact(str(error.get('code', 'unknown')))[:80]
+                    message = self.redact(str(error.get('message', '')))[:600]
+                except Exception:
+                    code, message = 'unparsed_error', 'response body withheld'
+                old_limit = budget.current
+                if budget.shrink(exc.code, message):
+                    self._output_ceiling[role] = budget.ceiling
+                    audit({'policy':OUTPUT_POLICY,'status':'token_ceiling','from':old_limit,'to':budget.current})
+                    continue
+                return retry_or_fail(f'HTTP {exc.code}; code={code}; {message}',False)
+            except Exception as exc:
+                return retry_or_fail(f'API transport failed: {type(exc).__name__}; details withheld',False)
+            try:
+                if not isinstance(result, dict):
+                    raise ValueError('Expected a JSON response object')
+                if mode == 'chat_completions':
+                    result = chat_response(result)
+            except (ValueError, KeyError, TypeError) as exc:
+                return retry_or_fail('Invalid API response shape; no action executed (' + type(exc).__name__ + ')', False)
+            usage = result.get('usage') or {}
+            self.usage['input_tokens'] += usage.get('input_tokens', 0)
+            self.usage['output_tokens'] += usage.get('output_tokens', 0)
+            self.usage['cached_tokens'] += (usage.get('input_tokens_details') or {}).get('cached_tokens', 0)
+            record = {'call': self.calls, 'role': role, 'model': model, 'effort': effective_effort,
+                      'api_route': metadata, 'requested_max_tokens':budget.current,
+                      'seconds': round(time.monotonic()-started, 3), 'usage': usage,
+                      'status': result.get('status'), 'incomplete_details': result.get('incomplete_details')}
+            if self.log:
+                append_audit(self.log,record)
+            reason = (result.get('incomplete_details') or {}).get('reason') or result.get('chat_finish_reason')
+            old_limit = budget.current
+            if budget.grow(reason):
+                audit({'policy':OUTPUT_POLICY,'status':'length_retry','reason':reason,
+                       'from':old_limit,'to':budget.current,'action_executed':False})
+                continue
+            return result
 
     @staticmethod
     def text(result):

@@ -25,7 +25,7 @@
     "swe-together": 4,
     "deep-swe": 28
   },
-  "runtime_sha256": "dd031fcd69aa74e2a8ac3ff64590e7e40f04ade7822a87f57899a045efe83b5d",
+  "runtime_sha256": "bfd850c988c65ee64ed2c2ddabdff829a79e96573610b91f8f3f16f5f4105659",
   "scoring_entrypoint": "scripts/score.py",
   "evaluation_entrypoint": "swe-persona run",
   "batch_entrypoint": "scripts/evaluate.py",
@@ -34,5 +34,9 @@
     "agent",
     "user_simulator"
   ],
-  "judge_api_source": "user_simulator"
+  "judge_api_source": "user_simulator",
+  "native_stability_entrypoint": "scripts/check_live_native.py",
+  "api_output_recovery_policy": "bounded-output-recovery-v1",
+  "simulator_output_protocol": "simulator-json-envelope-v1",
+  "agent_output_protocol": "coding-agent-json-envelope-v1"
 }

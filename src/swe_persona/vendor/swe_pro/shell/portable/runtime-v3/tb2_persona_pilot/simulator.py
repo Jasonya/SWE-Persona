@@ -17,6 +17,7 @@ import json
 from typing import Any, Dict, List
 
 from llm import Llm
+from swe_persona.simulator_output import response_envelope, prepend_envelope
 
 DECISION_SCHEMA: Dict[str, Any] = {
     "type": "object",
@@ -163,7 +164,32 @@ class UserSimulator:
                 "## Your previous decision was rejected by the controller\nFix all of these and decide again:\n- "
                 + "\n- ".join(rejections)
             )
-        messages = [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": "\n\n".join(parts)}]
+        allowed=observation['allowed_actions']
+        action=next((a for a in ('answer','feedback','wait','disclose','request_verification','end') if a in allowed),None)
+        if action is None:raise ValueError('No allowed simulator action')
+        example={'turn_id':observation['turn'],'observation_id':observation['observation_id'],
+            'action':action,'user_message':'Please address the current request.',
+            'ledger_updates':[],'disclosures':[],'verification_requests':[],
+            'evidence_refs':[],'branch_log':[],
+            'end_state':'completed_pending_final' if action=='end' else None,
+            'rationale':'Format example; decide from the current observation.'}
+        due=observation.get('requirement_to_disclose')
+        if due:
+            example['disclosures']=[{key:due[key] for key in ('requirement_ref','operation','replaces')}]
+            example['user_message']='\n'.join(due['must_include_verbatim']) or example['user_message']
+        envelope=response_envelope(DECISION_SCHEMA,example,{
+            'turn_id':'Copy the current observation turn integer exactly.',
+            'observation_id':'Copy the current observation_id exactly.',
+            'action':'Choose only from the current allowed_actions.',
+            'user_message':'The coding agent receives only this user message. Preserve every currently due disclosure marker and all current permissions.',
+            'ledger_updates':'Use [] unless authorized. Items have requirement_ref, field, value and reason_code; only the claimed field may be updated.',
+            'disclosures':'Use [] when no requirement is due. Otherwise copy the due requirement_ref, operation and replaces exactly.',
+            'verification_requests':'Use [] unless an allowed check is requested. Items have requirement_ref, checker_id, version and parameters. Encode parameters as a JSON object string; {} means no overrides. Only frozen registered values are permitted.',
+            'evidence_refs':'Cite registered evidence refs for every claimed measured outcome; use [] when none is claimed.',
+            'branch_log':'Use [] unless a branch decision applies. Items have candidate_id, event_id, decision and reason_code.',
+            'end_state':'Use null unless ending is allowed. When ending, use completed_pending_final or incomplete; this does not declare final benchmark success.',
+            'rationale':'A short private controller note; it is not delivered to the coding agent.'})
+        messages = [{"role": "system", "content": prepend_envelope(self.system_prompt,envelope)}, {"role": "user", "content": "\n\n".join(parts)}]
         return self.llm.json_obj(
             messages,
             DECISION_SCHEMA,

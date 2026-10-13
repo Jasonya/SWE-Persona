@@ -12,17 +12,26 @@ from execution_policy import BudgetClient, Deadline
 from run_reference import gold_proof
 from roleplay import FIT,fit_messages,validate_fit
 from build_task import build, validate, save
-from protocol import PROTOCOL, JUDGE_SCHEMA, SIM_SCHEMA, validate_judgment, eligible, checker, benchmark_outcome, visible_persona
+from protocol import (PROTOCOL, SIM_SCHEMA, eligible, checker, benchmark_outcome, visible_persona,
+    assess_judgment, AssessmentUnavailable, independent_judgment, simulator_system_prompt)
 
 
 def judge(llm, req, persona, public, messages, turn, audit, prompt, rubric, final=False):
     payload={'persona':visible_persona(persona),'public_constraints':public,'rubric':rubric,
              'eligible_visible_messages':eligible(messages,2),'final_recheck':final}
-    result=llm.json_obj([{'role':'system','content':prompt}, {'role':'user','content':json.dumps(payload,ensure_ascii=False)}],
-        JUDGE_SCHEMA,schema_name='requirement_judge',role='requirement.final' if final else f'requirement.turn{turn}',max_output_tokens=1800)
-    validate_judgment(result,req,messages,2)
-    save(audit/f'{turn:02d}-{"final" if final else "checkpoint"}.json',
-         {'input':payload,'output':result})
+    path=audit/f'{turn:02d}-{"final" if final else "checkpoint"}.json'
+    try:
+        result=assess_judgment(llm,req,messages,payload,prompt,
+            'requirement.final' if final else f'requirement.turn{turn}',path)
+    except AssessmentUnavailable as error:
+        # Keep the rejected model assessment in its original audit file. The
+        # complete literal contract has an independent checker, so no user turn
+        # or request to repeat explanations is needed to repair this judge.
+        if rubric.get('criteria') != [{'criterion_id':req['id']+'.contract','text':req['disclosure']}]:
+            raise ValueError('Independent checker does not cover the frozen rubric')
+        result,recovery=independent_judgment(req,persona,messages,error.errors)
+        result['assessment_recovery']=recovery
+        save(path.with_name(path.stem+'-resolution.json'),{'input':payload,'output':result,'recovery':recovery})
     return result
 
 
@@ -61,6 +70,23 @@ def main(argv=None):
             'whole_sample_cap_seconds':a.sample_seconds,'technical_scenario_coverage':False}
         save(private/'episode.json',episode); save(run/'transcript.json',messages)
         (run/'transcript.md').write_text('\n\n'.join('# '+m['message_id']+' ('+m['role']+')\n'+m['text'] for m in messages),encoding='utf-8')
+    snapshots=None;final_item=None;finalization_started=False;api_interrupted=False
+    def finalize():
+        nonlocal runtime,result,final_item,finalization_started
+        finalization_started=True
+        checkpoint()
+        _,_,final_item=snapshots.capture(99); runtime.remove(); runtime=None
+        verifier=Checkers(snapshots,llm,run,task); verifier.protect_official_tests=True; verifier.review_deadline=deadline
+        status,reason,evidence=verifier.official(final_item['patch'])
+        original=None if status=='unknown' else int(status=='pass')
+        check=checker(req,eligible(messages,2)); save(run/'persona-check.json',{'checks':[check],'independent':True})
+        outcome=benchmark_outcome(original,[check],met and satisfied)
+        result={'protocol':PROTOCOL,'task_id':task.task_id,'persona':a.persona,'original_reward':original,
+            'online_requirements':decisions,'objective_requirements':[check],'simulated_user_satisfied':satisfied,
+            'benchmark_outcome':outcome,'official':evidence,'official_reason':reason,
+            'experience_status':'not_executed_optional','binding_sha256':file_hash(bound/'binding.json'),
+            'termination':'satisfied' if satisfied else 'turn_budget_exhausted','measurement_scope':req['coverage']}
+
     try:
         fit=llm.json_obj(fit_messages(visible_persona(persona),task),FIT,
             schema_name='roleplay_fit',role='adapter.fit',max_output_tokens=1600)
@@ -106,7 +132,7 @@ def main(argv=None):
             if met and reply.status=='done':
                 current=judge(llm,req,persona,public,messages,turn,audit,judge_prompt,rubric,final=True)
                 decisions.append({'turn':turn,'stage':'final_recheck','judgment':current}); met=current['verdict']=='MET'
-            decision=llm.json_obj([{'role':'system','content':simulator_prompt},
+            decision=llm.json_obj([{'role':'system','content':simulator_system_prompt(simulator_prompt)},
                 {'role':'user','content':json.dumps({'persona':visible_persona(persona),'public_task':public,'transcript':messages,
                  'current_requirement':req,'judgment':current,'agent_requests_completion':reply.status=='done'},ensure_ascii=False)}],
                 SIM_SCHEMA,schema_name='requirement_user',role=f'simulator.turn{turn+1}',max_output_tokens=1000)
@@ -119,23 +145,30 @@ def main(argv=None):
             message=decision['message']
             if not met:
                 message+='\nR1 is still '+current['verdict']+': '+current['feedback']
-        checkpoint()
-        _,_,item=snapshots.capture(99); runtime.remove(); runtime=None
-        verifier=Checkers(snapshots,llm,run,task); verifier.protect_official_tests=True; verifier.review_deadline=deadline
-        status,reason,evidence=verifier.official(item['patch'])
-        original=None if status=='unknown' else int(status=='pass')
-        check=checker(req,eligible(messages,2)); save(run/'persona-check.json',{'checks':[check],'independent':True})
-        outcome=benchmark_outcome(original,[check],met and satisfied)
-        result={'protocol':PROTOCOL,'task_id':task.task_id,'persona':a.persona,'original_reward':original,
-            'online_requirements':decisions,'objective_requirements':[check],'simulated_user_satisfied':satisfied,
-            'benchmark_outcome':outcome,'official':evidence,'official_reason':reason,
-            'experience_status':'not_executed_optional','binding_sha256':file_hash(bound/'binding.json'),
-            'termination':'satisfied' if satisfied else 'turn_budget_exhausted','measurement_scope':req['coverage']}
+        finalize()
     except Exception as error:
+        from swe_persona.api_recovery import assess_interrupted,is_api_interruption
         checkpoint()
-        result={'protocol':PROTOCOL,'task_id':task.task_id,'persona':a.persona,'original_reward':None,
-            'online_requirements':decisions,'objective_requirements':[], 'benchmark_outcome':'infrastructure_error',
-            'error_type':type(error).__name__,'error':str(error)[:1000],'experience_status':'not_executed_optional'}
+        api_interrupted=is_api_interruption(error)
+        if api_interrupted and snapshots is not None and not finalization_started:
+            try:finalize()
+            except Exception as final_error:
+                save(run/'final-verification-error.json',{'error_type':type(final_error).__name__})
+        if result is None:
+            result={'protocol':PROTOCOL,'task_id':task.task_id,'persona':a.persona,'original_reward':None,
+                'online_requirements':decisions,'objective_requirements':[], 'benchmark_outcome':'infrastructure_error',
+                'experience_status':'not_executed_optional'}
+        result.update(error_type=type(error).__name__,error=str(error)[:1000])
+        if api_interrupted:
+            states=[item.get('verdict') for item in result.get('objective_requirements',[])]
+            persona_grade=False if 'fail' in states else True if states and all(v=='pass' for v in states) else None
+            native=result['original_reward']==1 if result.get('original_reward') is not None else None
+            progress=bool(final_item and final_item.get('patch','').strip()) or any(
+                item.get('role')=='agent' and item.get('text','').strip() for item in messages)
+            assessment=assess_interrupted(native,persona_grade,artifacts_available=final_item is not None,progress=progress,
+                budget_exhausted=bool(deadline.expires and __import__('time').monotonic()>=deadline.expires))
+            result.update(benchmark_outcome=assessment['status'],api_recovery_assessment=assessment,
+                          termination='api_interrupted')
     finally:
         if runtime is not None:
             try: runtime.remove()

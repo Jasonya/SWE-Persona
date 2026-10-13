@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -171,6 +172,13 @@ class Controller(_BaseController):
                 proof[checker_id] = result.get("status")
             sources.append("validate_bindings.py::reference_compliant")
         validation_dir = Path(__file__).resolve().parent / "runs" / "validation"
+        gate_dir = os.environ.get('PCB_RUBRIC_GATE_DIR')
+        if gate_dir:
+            validation_dir = Path(gate_dir)
+            marker = json.loads((validation_dir/'gate.json').read_text(encoding='utf-8'))
+            if (marker.get('profile') != 'swe-bench-pro-shell' or marker.get('passed') is not True
+                    or marker.get('worker_exit_code') != 0):
+                raise ValueError('A passed SWE-bench Pro shell calibration gate is required')
         for path in sorted(validation_dir.glob("rubric_report*.json")):
             try:
                 report = json.loads(path.read_text(encoding="utf-8"))

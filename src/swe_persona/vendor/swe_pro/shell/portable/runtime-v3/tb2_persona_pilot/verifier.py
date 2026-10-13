@@ -112,10 +112,21 @@ def compute_metrics(
         if item.get("item") == "discloses_only_activated" and item.get("score", 2) < 2:
             policy_audit.append({"item": item["item"], "score": item["score"], "reason": item.get("reason")})
     invalid_reasons = list(controller.invalid_reasons) + [f"missed_disclosure_deadline:{r}" for r in controller.missed_deadlines(max_turns + 1)]
+    required_ids = {c.requirement_id for c in controller.selected if c.schedule.get('required', True)}
+    required_ids.update(entry.id for entry in getattr(ledger, 'entries', {}).values()
+                        if entry.activation_status == 'active')
+    checked_ids = {e['requirement'].rsplit('@', 1)[0] for e in evolved}
+    missing_checks = sorted(required_ids - checked_ids)
+    if arm == 'progressive_persona':
+        if not controller.selected or not evolved:
+            invalid_reasons.append('persona_requirements_not_verified')
+        invalid_reasons.extend('persona_requirement_check_missing:'+rid for rid in missing_checks)
     episode_valid = not invalid_reasons and not controller.infra_failures and not no_opportunity
 
-    all_evolved_met = bool(evolved) and len(met) == len(evolved)
-    joint = bool(base_ok and (all_evolved_met if evolved else True) and episode_valid)
+    all_evolved_met = bool(evolved) and not missing_checks and len(met) == len(evolved)
+    persona_pass = False if not_met else True if all_evolved_met else None
+    persona_ok = all_evolved_met if arm == 'progressive_persona' or evolved else True
+    joint = bool(base_ok and persona_ok and episode_valid)
 
     return {
         "arm": arm,
@@ -126,6 +137,9 @@ def compute_metrics(
             "not_met": len(not_met),
             "unknown": len(unknown),
             "all_met": all_evolved_met,
+            "pass": persona_pass,
+            "required_ids": sorted(required_ids),
+            "missing_check_ids": missing_checks,
             "per_requirement": [
                 {"requirement": e["requirement"], "status": e["status"], "reason_code": e["reason_code"],
                  "introduced_turn": e["introduced_turn"], "claimed_by_agent": e["claimed_by_agent"]}

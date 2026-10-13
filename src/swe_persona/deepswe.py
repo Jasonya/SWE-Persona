@@ -110,8 +110,12 @@ def execute(root,row,config,out,mode,gate=None):
     native=result.get('base_pass') if result.get('original_evaluation_valid') else None
     persona=result.get('persona_pass') if result.get('persona_evaluation_valid') else None
     report={'benchmark_outcome':assessment['status'],'benchmark_assessment':assessment,
+        'api_recovery_assessment':result.get('api_recovery_assessment'),
         'original_reward':None if native is None else int(native),'persona_check':{'status':'pass' if persona is True else 'fail' if persona is False else 'invalid'},
         'evaluation_valid':valid,'end_reason':result.get('end_reason'),'stage':result.get('stage'),
+        'error':result.get('error'),'final_error':result.get('final_error'),
+        'error_category':'simulator_message_rejected' if result.get('end_reason')=='simulator_message_error' else None,
+        'simulator_message_recoveries':result.get('simulator_message_recoveries',[]),
         'budget_exhausted':result.get('budget_exhausted'),'source_result':str(result_path.relative_to(out)),
         'historical_pier_equivalence':False,'calibration_report':str(gate/'calibration.json')}
     write(out/'persona-result.json',report)

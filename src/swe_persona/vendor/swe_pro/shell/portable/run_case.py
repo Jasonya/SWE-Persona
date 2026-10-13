@@ -30,7 +30,12 @@ def prepare(case_id):
     task=SimpleNamespace(task_id=case['instance_id'],row_index_zero=case['row_index_zero'],public_contract=binding['public_contract'])
     loaded=registry.load_binding(task,case['persona_id'],case['data_version'])
     assert loaded==binding
-    candidates=[registry._candidate_from_json(r,case['persona_id']) for r in binding['requirements']]
+    # Use the exact production loader and selection path, including applicability.
+    expected=[r['requirement_id'] for r in binding['requirements']]
+    candidates=registry.build_candidates(task,case['persona_id'],max_evolved=len(expected),data_version=case['data_version'])
+    selected=registry.applicable_candidates(candidates,len(expected))
+    if (not expected or [c.requirement_id for c in selected]!=expected):
+        raise ValueError('Production loader did not load every frozen persona requirement')
     for candidate in candidates:
         candidate.statement()
     import run_episode  # Real controller, judge, checkers and adapter import graph.
@@ -68,7 +73,10 @@ def main():
         print(json.dumps({'case_id':args.case,'requirements':[{'requirement_id':c.requirement_id,'statement':c.statement(),'schedule':c.schedule,'rubric':c.template['satisfaction'],'checker':c.checker} for c in candidates]},indent=2))
         return 0
     if args.dry_run:
-        print(json.dumps({'case_id':args.case,'dry_run':'pass','requirements_loaded':len(candidates),'native_contract_sha256':binding['public_contract_sha256'],'runtime_path':case.get('runtime_path','runtime'),'imports':'real controller, simulator, judge, checkers and adapter dispatcher','official_evaluator':'scaleapi/SWE-bench_Pro-os@ca10a60a5fcae51e6948ffe1485d4153d421e6c5','model_calls':0,'container_runs':0,'limit':'No official test or coding-agent episode is executed'},indent=2))
+        print(json.dumps({'case_id':args.case,'dry_run':'pass','requirements_expected':len(binding['requirements']),
+            'requirements_loaded':len(candidates),'loaded_requirement_ids':[c.requirement_id for c in candidates],
+            'requirement_loader':'registry.build_candidates + applicable_candidates',
+            'native_contract_sha256':binding['public_contract_sha256'],'runtime_path':case.get('runtime_path','runtime'),'imports':'real controller, simulator, judge, checkers and adapter dispatcher','official_evaluator':'scaleapi/SWE-bench_Pro-os@ca10a60a5fcae51e6948ffe1485d4153d421e6c5','model_calls':0,'container_runs':0,'limit':'No official test or coding-agent episode is executed'},indent=2))
         return 0
     if not args.output:
         ap.error('--output is required for execution and must be outside the frozen public root')

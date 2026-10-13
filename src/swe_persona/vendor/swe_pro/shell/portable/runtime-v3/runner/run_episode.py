@@ -590,6 +590,11 @@ def main() -> int:
         manifest, args.persona, max_evolved=max_evolved, data_version=args.data_version
     )
     selected = applicable_candidates(candidates, max_evolved)
+    if args.arm == 'progressive_persona' and max_evolved > 0 and not selected:
+        raise ValueError('Progressive persona evaluation loaded no persona requirements')
+    required_candidates = [c for c in candidates if c.applicable and c.schedule.get('required', True)]
+    if args.arm == 'progressive_persona' and any(c not in selected for c in required_candidates):
+        raise ValueError('The evolved requirement budget omits a required persona requirement')
     expected_trigger_by_template = {
         "first_pr_isolated_patch": "approach_visible",
         "first_pr_patch_explanation": "first_patch",
@@ -665,10 +670,88 @@ def main() -> int:
     # A persona requirement is required only after its semantic trigger actually
     # caused an agent-visible disclosure. Untriggered patch-review or handoff
     # templates are not silently forced by the turn deadline.
-    required_evolved: set[str] = set()
+    required_evolved: set[str] = {f'{c.requirement_id}@1' for c in selected if c.schedule.get('required', True)}
     disclosed_evolved: set[str] = set()
     delivery_audit = {"valid": None, "errors": [], "messages": []}
     public_go_tests: List[str] = []
+
+    complete_contract_message_ids = []
+    agent_turns_used = 0
+    artifacts_ready = False
+    finalization_started = False
+    finalization_complete = False
+    api_interrupted = False
+    api_recovery_assessment = None
+    turn = 1
+
+    def finalize():
+        nonlocal outcome, metrics, judge_output, delivery_audit
+        nonlocal complete_contract_message_ids, agent_turns_used, disclosed_evolved
+        nonlocal artifacts_ready, finalization_started, finalization_complete
+        finalization_started = True
+        agent_turns_used = turn
+        final_image, final_digest, _changed = controller.snapshot(container, 99)
+        artifacts_ready = True
+        disclosed_evolved = {ref for item in transcript if item.get("role") == "user"
+                             for ref in item.get("disclosure_refs", []) if not ref.startswith("native.req.")}
+        outcome = verify_outcome(
+            ledger, checkers, final_image, final_digest, turn=99,
+            reference_checkers=None, transcript=transcript,
+        )
+        if args.arm == "progressive_persona":
+            judge_output = run_judge(
+                judge_llm,
+                [{key: value for key, value in item.items()
+                  if key in ("role", "message_id", "turn", "status", "text", "evidence_refs")}
+                 for item in transcript],
+                ledger.events,
+                [dict(result.public_summary(), turn=result.turn) for result in checkers.results],
+                verification_mode=ONLINE if args.rubric_feedback == "online" else FINAL_ONLY,
+                episode_budget={
+                    "max_agent_turns": controller.max_turns,
+                    "agent_turns_used": agent_turns_used,
+                    "max_agent_steps_per_turn": args.max_steps,
+                    "requirement_deadlines": {
+                        candidate.requirement_id: candidate.schedule["deadline_turn"]
+                        for candidate in selected
+                    },
+                },
+                requirement_refs=[f"{candidate.requirement_id}@1" for candidate in selected],
+                persona_id=args.persona,
+                # `assert_no_leak` only guards rendered observations; the simulator's own reply is
+                # never re-checked, so the judge's deterministic audit is the last chance to catch a
+                # leak into a message the agent actually read.
+                hidden_markers=list(manifest.hidden_markers()) + hidden_test_names(manifest, public_go_tests),
+            )
+        complete_contract_message_ids = [
+            str(item["message_id"])
+            for item in transcript
+            if item.get("role") == "user"
+            and not (original_contract_errors(str(item.get("text") or ""), manifest)
+                     if args.arm == "original"
+                     else safe_progressive_contract_errors(str(item.get("text") or ""), manifest))
+        ]
+        if args.arm == "original" and not complete_contract_message_ids:
+            # The original arm carries the byte-for-byte upstream rendering; quoted
+            # dataset fields need not also match their decoded representation.
+            complete_contract_message_ids = ["u-1"]
+        if args.arm == "progressive_persona":
+            delivery_audit = audit_delivery(
+                transcript, call_log.calls, native_tracker, required_evolved, controller.max_turns,
+                mini_receipts=(getattr(agent, "delivery_receipts", []) if agent else []),
+                mini_trajectory_path=(run_dir / "minisweagent" / "trajectory.json"),
+            )
+        if args.arm == "progressive_persona" and (
+            native_tracker.missing_ids() or not complete_contract_message_ids
+            or not required_evolved <= disclosed_evolved
+            or not delivery_audit["valid"]
+        ):
+            controller.invalid_reasons.append("required_disclosure_incomplete")
+        metrics = compute_metrics(
+            args.arm, outcome, ledger, controller, transcript, judge_output,
+            max_turns=controller.max_turns, agent_turns_used=agent_turns_used,
+        )
+        finalization_complete = True
 
     try:
         container.start()
@@ -910,68 +993,17 @@ def main() -> int:
             user_message_source = str(decision.get("disclosure_source") or "simulator")
             turn += 1
 
-        agent_turns_used = turn
-        final_image, final_digest, _changed = controller.snapshot(container, 99)
-        outcome = verify_outcome(
-            ledger, checkers, final_image, final_digest, turn=99,
-            reference_checkers=None, transcript=transcript,
-        )
-        if args.arm == "progressive_persona":
-            judge_output = run_judge(
-                judge_llm,
-                [{key: value for key, value in item.items()
-                  if key in ("role", "message_id", "turn", "status", "text", "evidence_refs")}
-                 for item in transcript],
-                ledger.events,
-                [dict(result.public_summary(), turn=result.turn) for result in checkers.results],
-                verification_mode=ONLINE if args.rubric_feedback == "online" else FINAL_ONLY,
-                episode_budget={
-                    "max_agent_turns": controller.max_turns,
-                    "agent_turns_used": agent_turns_used,
-                    "max_agent_steps_per_turn": args.max_steps,
-                    "requirement_deadlines": {
-                        candidate.requirement_id: candidate.schedule["deadline_turn"]
-                        for candidate in selected
-                    },
-                },
-                requirement_refs=[f"{candidate.requirement_id}@1" for candidate in selected],
-                persona_id=args.persona,
-                # `assert_no_leak` only guards rendered observations; the simulator's own reply is
-                # never re-checked, so the judge's deterministic audit is the last chance to catch a
-                # leak into a message the agent actually read.
-                hidden_markers=list(manifest.hidden_markers()) + hidden_test_names(manifest, public_go_tests),
-            )
-        complete_contract_message_ids = [
-            str(item["message_id"])
-            for item in transcript
-            if item.get("role") == "user"
-            and not (original_contract_errors(str(item.get("text") or ""), manifest)
-                     if args.arm == "original"
-                     else safe_progressive_contract_errors(str(item.get("text") or ""), manifest))
-        ]
-        if args.arm == "original" and not complete_contract_message_ids:
-            # The original arm carries the byte-for-byte upstream rendering; quoted
-            # dataset fields need not also match their decoded representation.
-            complete_contract_message_ids = ["u-1"]
-        if args.arm == "progressive_persona":
-            delivery_audit = audit_delivery(
-                transcript, call_log.calls, native_tracker, required_evolved, controller.max_turns,
-                mini_receipts=(getattr(agent, "delivery_receipts", []) if agent else []),
-                mini_trajectory_path=(run_dir / "minisweagent" / "trajectory.json"),
-            )
-        if args.arm == "progressive_persona" and (
-            native_tracker.missing_ids() or not complete_contract_message_ids
-            or not required_evolved <= disclosed_evolved
-            or not delivery_audit["valid"]
-        ):
-            controller.invalid_reasons.append("required_disclosure_incomplete")
-        metrics = compute_metrics(
-            args.arm, outcome, ledger, controller, transcript, judge_output,
-            max_turns=controller.max_turns, agent_turns_used=agent_turns_used,
-        )
-    except Exception:
+        finalize()
+    except Exception as exc:
+        from swe_persona.api_recovery import is_api_interruption
+        api_interrupted = is_api_interruption(exc)
         error = traceback.format_exc()
         print(error, flush=True)
+        if api_interrupted and started_container and not finalization_started:
+            try:
+                finalize()
+            except Exception:
+                error += '\nFinal verification failed:\n' + traceback.format_exc()
     finally:
         if started_container and not args.keep_container:
             container.remove()
@@ -985,7 +1017,6 @@ def main() -> int:
     (run_dir / "turns.json").write_text(json.dumps(turn_records, indent=2), encoding="utf-8")
     disclosure_summary = native_tracker.summary()
     missing_evolved = sorted(required_evolved - disclosed_evolved)
-    complete_contract_message_ids = locals().get("complete_contract_message_ids", [])
     episode_valid = bool(
         error is None
         and (metrics.get("valid_evaluation_coverage") or {}).get("episode_valid", False)
@@ -995,7 +1026,25 @@ def main() -> int:
                  or delivery_audit["valid"] is False)
         )
     )
+    from swe_persona.api_recovery import transport_was_exhausted
+    api_interrupted = api_interrupted or transport_was_exhausted(run_dir.parent/'api')
+    if api_interrupted:
+        from swe_persona.api_recovery import assess_interrupted
+        base_status = (outcome.get('base_task') or {}).get('status')
+        native = base_status == 'pass' if base_status in ('pass', 'fail') else None
+        states = [item.get('status') for item in outcome.get('evolved_requirements', [])]
+        persona = False if 'not_met' in states else True if states and all(v == 'met' for v in states) else None
+        if not finalization_complete and persona is True:
+            persona = None
+        progress = any(item.get('role') == 'agent' and (item.get('text','').strip() or item.get('shell_steps',0))
+                       for item in transcript) or bool(agent and getattr(agent, 'broker', None) and agent.broker.commands)
+        api_recovery_assessment = assess_interrupted(native, persona, artifacts_available=artifacts_ready,progress=progress,
+            integrity=not (judge_output or {}).get('episode_invalid_reasons'))
+        episode_valid = api_recovery_assessment['status'] in ('pass', 'fail')
+        metrics['base_task_success'] = native
+        metrics['joint_success'] = int(api_recovery_assessment['status'] == 'pass') if episode_valid else None
     episode = {
+        "api_recovery_assessment": api_recovery_assessment,
         "run_id": run_id,
         "arm": args.arm,
         "persona": args.persona,
@@ -1037,11 +1086,11 @@ def main() -> int:
             "visible_to_agent": bool(complete_contract_message_ids),
         },
         "episode_valid": episode_valid,
-        "base_pass": metrics.get("base_task_success") if episode_valid else None,
+        "base_pass": (int(outcome['base_task']['status']=='pass')
+                      if (outcome.get('base_task') or {}).get('status') in ('pass','fail') else None),
         "persona_pass": (
-            int(metrics["evolved_requirement_success"]["all_met"])
-            if episode_valid and args.arm == "progressive_persona"
-            and "all_met" in metrics.get("evolved_requirement_success", {}) else None
+            metrics.get("evolved_requirement_success", {}).get('pass')
+            if args.arm == "progressive_persona" else None
         ),
         "joint_success": metrics.get("joint_success") if episode_valid else None,
         "delivery_audit": delivery_audit,
@@ -1079,6 +1128,9 @@ def main() -> int:
         "judge": judge_output,
         "error": error,
     }
+    if api_recovery_assessment:
+        episode.update(base_pass=api_recovery_assessment['native_pass'],persona_pass=api_recovery_assessment['persona_pass'],
+                       terminal_reason='api_interrupted',evaluation_invalid_reason=None if episode_valid else api_recovery_assessment['reason'])
     (run_dir / "episode.json").write_text(json.dumps(episode, ensure_ascii=False, indent=2), encoding="utf-8")
     write_markdown(run_dir / "transcript.md", episode)
     for tag in {f"{controller.snapshot_tag_prefix}-t{value}:latest"

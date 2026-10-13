@@ -202,13 +202,23 @@ def build_candidates(
     if version == DEFAULT_DATA_VERSION:
         return _legacy_candidates(manifest, persona_id)
     document = load_binding(manifest, persona_id, version)
-    if document.get("applicability", {}).get("verdict") != "applicable":
-        return []
+    verdict = (document.get("applicability") or {}).get("verdict")
+    if verdict != "applicable":
+        if verdict == "not_applicable" and not document.get("requirements"):
+            return []
+        raise ValueError("Binding with persona requirements needs applicability.verdict='applicable'; "
+                         "missing or contradictory applicability cannot silently drop requirements")
     if document.get("status") not in READY_STATUSES:
         raise RuntimeError(
             f"binding {binding_path(manifest, persona_id, version)} is {document.get('status')!r}, not ready"
         )
-    return [_candidate_from_json(item, persona_id) for item in document.get("requirements", [])]
+    items = document.get("requirements") or []
+    if not items:
+        raise ValueError("Applicable persona binding has no requirements")
+    ids = [item['requirement_id'] for item in items]
+    if len(ids) != len(set(ids)):
+        raise ValueError("Duplicate persona requirement IDs in binding")
+    return [_candidate_from_json(item, persona_id) for item in items]
 
 
 def applicable_candidates(candidates: List[Candidate], max_evolved: int) -> List[Candidate]:

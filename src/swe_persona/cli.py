@@ -38,12 +38,21 @@ def worker(root,mode,output,config=None,gate=None,time_limit=None):
         write(Path(output)/'time-limit.json',dict(time_limit,**{'execution':receipt}))
         return receipt['process_exit_code']
 
+def gate_allows_execution(value):
+    if value.get('passed') is True:
+        return True
+    if value.get('profile') != 'swe-bench-live' or value.get('worker_exit_code') != 0:
+        return False
+    from .swe_live import live_calibration_allowed
+    return value.get('execution_allowed') is True and live_calibration_allowed(value.get('calibration') or {})
+
+
 def calibrate(dataset,profile,config_path,cache):
     config=load_config(config_path,require_keys=True)
     identity={'profile':profile,'api_config_sha256':fingerprint(config),'runtime_sha256':runtime_hash()}
     key=hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest()[:20]
     gate=Path(cache)/'calibration'/key;marker=gate/'gate.json'
-    if marker.exists() and json.loads(marker.read_text()).get('passed'):return gate
+    if marker.exists() and gate_allows_execution(json.loads(marker.read_text())):return gate
     selected=None
     for row in rows(dataset):
         if row['interaction']['profile_id']!=profile:continue
@@ -54,15 +63,42 @@ def calibrate(dataset,profile,config_path,cache):
     with tempfile.TemporaryDirectory(prefix='calibration-input-',dir=Path(cache)) as temp:
         root=materialize(selected,Path(temp)/'task')
         rc=worker(root,'calibrate',gate,config_path)
+    report={}
     if profile=='swe-bench-pro-shell':
         reports=list(gate.glob('rubric_report.*.json'))
         passed=rc==0 and bool(reports) and all(json.loads(p.read_text()).get('gate_passed') for p in reports)
     else:
         p=gate/'calibration.json'
-        passed=rc==0 and p.exists() and bool(json.loads(p.read_text()).get('passed'))
-    write(marker,dict(identity,passed=passed,worker_exit_code=rc))
-    if not passed:raise RuntimeError(f'Judge calibration failed; see {gate / "calibrate.log"}')
+        report=json.loads(p.read_text()) if p.exists() else {}
+        passed=rc==0 and bool(report.get('passed'))
+    value=dict(identity,passed=passed,worker_exit_code=rc,execution_allowed=passed)
+    if profile=='swe-bench-live':
+        from .swe_live import live_calibration_allowed
+        value.update(calibration=report,execution_allowed=rc==0 and live_calibration_allowed(report))
+    write(marker,value)
+    if not gate_allows_execution(value):raise RuntimeError(f'Judge calibration failed; see {gate / "calibrate.log"}')
     return gate
+
+def shell_requirement_coverage(row, episode):
+    """Compare real episode loading and grading with the immutable row."""
+    expected={r['requirement_id'] for r in row['requirements']}
+    required={r['requirement_id'] for r in row['requirements'] if r.get('required',True)}
+    # Event-triggered optional candidates retain their frozen schedule. Once
+    # disclosed, they must also have an independent final requirement check.
+    disclosed=(episode.get('evolved_requirement_disclosure') or {}).get('disclosed_ids') or []
+    required.update(ref.rsplit('@',1)[0] for ref in disclosed)
+    loaded={r['requirement_id'] for r in episode.get('rubric_config') or []}
+    checks=(episode.get('outcome') or {}).get('evolved_requirements') or []
+    checked={r['requirement'].rsplit('@',1)[0] for r in checks}
+    missing_loaded=sorted(expected-loaded);missing_checks=sorted(required-checked)
+    states=[r.get('status') for r in checks]
+    persona=False if 'not_met' in states else True if (checks and not missing_loaded and not missing_checks
+        and all(v=='met' for v in states)) else None
+    return {'expected_ids':sorted(expected),'required_check_ids':sorted(required),
+            'loaded_ids':sorted(loaded),'checked_ids':sorted(checked),
+            'missing_loaded_ids':missing_loaded,'missing_check_ids':missing_checks,
+            'complete':not missing_loaded and not missing_checks,'persona_pass':persona}
+
 
 def normalize_result(row,out,rc):
     profile=row['interaction']['profile_id'];native=None;persona=None;details=[]
@@ -91,10 +127,61 @@ def normalize_result(row,out,rc):
         checks=d.get('objective_requirements') or []
         values=[x.get('verdict') for x in checks]
         persona=False if 'fail' in values else True if values and all(v=='pass' for v in values) else None
+    recovery=None
+    coverage=None;coverage_error=None
+    if matches:
+        recovery=d.get('api_recovery_assessment')
+        if recovery is None and isinstance(d.get('benchmark_outcome'),dict):
+            candidate=d['benchmark_outcome']
+            if candidate.get('api_interrupted') or candidate.get('online_judge_unavailable'):recovery=candidate
+        if d.get('supervisor_status') not in (None,'completed') or d.get('cleanup_error'):
+            recovery=None
+        if recovery is not None:
+            status=recovery['status'];native=recovery.get('native_pass');persona=recovery.get('persona_pass')
+    if profile=='swe-bench-pro-shell' and matches and 'requirements' in row:
+        coverage=shell_requirement_coverage(row,d)
+        base_status=((d.get('outcome') or {}).get('base_task') or {}).get('status')
+        if native is None and base_status in ('pass','fail'):native=base_status=='pass'
+        elif native in (0,1):native=bool(native)
+        persona=coverage['persona_pass']
+        if coverage['missing_loaded_ids']:
+            status='invalid';coverage_error='persona_requirements_not_loaded';recovery=None
+        elif recovery is not None:
+            # Interrupted grading can leave unknown requirements, but cannot
+            # use approval fields in place of independent requirement checks.
+            from .api_recovery import assess_interrupted
+            recovery=assess_interrupted(native,persona,
+                artifacts_available=recovery.get('artifacts_available',False),
+                progress=recovery.get('agent_progress',False),integrity=recovery.get('status')!='invalid',
+                budget_exhausted=recovery.get('budget_exhausted',False))
+            status=recovery['status']
+        elif coverage['missing_check_ids'] or not (d.get('outcome') or {}).get('evolved_requirements'):
+            status='invalid';coverage_error='persona_requirement_checks_missing'
+        elif status=='pass' and (native is not True or persona is not True):
+            status='fail' if native is False or persona is False else 'invalid'
     result={'task_id':row['task_id'],'source_benchmark':row['source_benchmark'],'source_subset':row['source_subset'],
             'content_sha256':row['content_sha256'],'harness_version':__version__,'profile':profile,
             'status':status,'native_pass':native,'persona_pass':persona,'joint_success':status=='pass',
             'worker_exit_code':rc,'details':details,'note':'Invalid and infrastructure errors are not task failures.'}
+    if recovery is not None:
+        result.update(verification_complete=recovery['verification_complete'],
+                      outcome_reason=recovery.get('outcome_reason','api_interrupted'))
+        result['online_judge_assessment' if recovery.get('online_judge_unavailable') else
+               'api_recovery_assessment']=recovery
+    if coverage is not None:
+        result['persona_requirement_coverage']=coverage
+    if coverage_error:
+        result.update(outcome_reason=coverage_error,verification_complete=False,
+            note='Native diagnostics are retained; missing persona loading or checks cannot earn joint credit.')
+    preflight_error=out/'preflight-error.json'
+    if preflight_error.is_file():
+        diagnostic=json.loads(preflight_error.read_text())
+        result.update(error_category=diagnostic['error_category'],
+                      episode_started=diagnostic['episode_started'],error=diagnostic['error'])
+        result['details'].append('preflight-error.json')
+    elif matches:
+        for field in ('error','final_error','error_category','end_reason','simulator_message_recoveries'):
+            if d.get(field) is not None:result[field]=d[field]
     write(out/'result.json',result)
     return result
 
@@ -159,6 +246,12 @@ def main():
         result.update(status='calibration_error',error=str(exc))
         write(args.output/'result.json',result)
         print(json.dumps(result,indent=2));return 2
+    if gate is not None:
+        value=json.loads((gate/'gate.json').read_text())
+        run_config=json.loads((args.output/'run-config.json').read_text())
+        run_config['calibration']={'passed':value['passed'],'execution_allowed':gate_allows_execution(value),
+            'status':value.get('calibration',{}).get('status'),'gate':str(gate)}
+        write(args.output/'run-config.json',run_config)
     with tempfile.TemporaryDirectory(prefix='input-',dir=args.cache) as temp:
         root=materialize(row,Path(temp)/'task')
         restorations=[json.loads(p.read_text()) for p in root.glob('tasks/*/asset-restoration.json')]

@@ -18,7 +18,7 @@ def episode_manifest(episode):
         from .coding_backend import backend_sources
         paths += backend_sources(root)
         paths += [root/'dspilot'/f'{name}.py' for name in
-                  ('task_workflow','resource_probe','runbook_probe','staged','staged_cli','checks_staged','run_staged','simulator_staged','recovery_staged','events_staged','probes_staged','fixture_repairs','calibrate_staged','report_policy')]
+                  ('task_workflow','resource_probe','runbook_probe','staged','staged_cli','checks_staged','run_staged','simulator_staged','simulator_evidence','recovery_staged','events_staged','probes_staged','fixture_repairs','calibrate_staged','report_policy')]
         selected=root/episode.binding.raw.get('staged_plan_path',
             f'data/staged_bindings/{episode.task.id}--{episode.persona["id"]}.json')
         paths += [selected]

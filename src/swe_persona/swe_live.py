@@ -14,6 +14,11 @@ PROFILE='swe-bench-live'
 def sha(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def adapter(root):return root/'runtime/project/scripts/swe_live_multilang/tb3_adapter'
 
+def live_calibration_allowed(report):
+    import runpy
+    protocol=Path(__file__).parent/'vendor/swe_live/runtime/project/scripts/swe_live_multilang/tb3_adapter/protocol.py'
+    return runpy.run_path(str(protocol))['calibration_allowed'](report)
+
 def materialize_live(row,root,task):
     pp=task/'tests/persona';pp.mkdir(parents=True,exist_ok=True)
     extra=json.loads(row['interaction']['config_json'])
@@ -41,12 +46,34 @@ def materialize_live(row,root,task):
     closed=pp/'closed_loop'
     write(closed/'rubric.json',{'requirement_id':r['requirement_id'],'disclosure':r['disclosure'],
        'criteria':json.loads(r['rubric_json']),'binding_sha256':sha(pp/'binding.json')})
-    # Calibration and production must consume the same versioned judge prompt.
+    # Calibration and production consume the same versioned prompts and schema.
     import runpy
     prompts=runpy.run_path(str(adapter(root)/'protocol.py'))
     (closed/'judge_prompt.md').write_text(prompts['JUDGE_PROMPT'])
-    write(closed/'policy.json',extra['policy'])
-    write(closed/'manifest.json',{'protocol':extra['protocol'],'binding_sha256':sha(pp/'binding.json'),
+    (closed/'simulator_prompt.md').write_text(prompts['SIM_PROMPT'])
+    write(closed/'response_schema.json',prompts['JUDGE_SCHEMA'])
+    write(closed/'simulator_schema.json',prompts['SIM_SCHEMA'])
+    (pp/'checker.py').write_bytes((adapter(root)/'protocol.py').read_bytes())
+    # Fallback is restricted to the complete literal contract checked here.
+    expected=prompts['requirement'](persona)
+    if (req['checker']!=expected['checker'] or req['disclosure']!=expected['disclosure']
+        or json.loads(r['rubric_json'])!=[{'criterion_id':'R1.contract','text':req['disclosure']}]):
+        raise ValueError('SWE-Live independent checker does not cover the frozen requirement')
+    policy=dict(extra['policy'],judge_policy=prompts['JUDGE_POLICY'],
+        calibration_policy=prompts['CALIBRATION_POLICY'],
+        api_schema_evidence_error='bounded internal recovery; unknown assessment; independent literal checker fallback')
+    write(closed/'policy.json',policy)
+    (closed/'README.md').write_text('Host-only requirement loop: registered eligible message IDs; '
+        'two internal validation attempts; unavailable assessments remain unknown in audit. '
+        'Only this complete literal handoff contract permits independent checker fallback. '
+        'Independent native and persona final verification remain mandatory.\n')
+    protocol_file=pp/'protocol.json'
+    protocol_config=json.loads(protocol_file.read_text()) if protocol_file.exists() else {}
+    write(protocol_file,dict(protocol_config,protocol=prompts['PROTOCOL'],source_protocol=extra['protocol'],
+                            judge_policy=prompts['JUDGE_POLICY']))
+    write(pp/'build-identity.json',{'protocol':prompts['PROTOCOL'],'source_protocol':extra['protocol'],
+        'source_task_sha256':sha(native_file),'persona_id':persona['id'],'cap_seconds':row['budget']['episode_timeout_sec']})
+    write(closed/'manifest.json',{'protocol':prompts['PROTOCOL'],'source_protocol':extra['protocol'],'binding_sha256':sha(pp/'binding.json'),
        'files':{p.name:sha(p) for p in sorted(closed.iterdir()) if p.is_file() and p.name!='manifest.json'}})
     lock={p.relative_to(task).as_posix():sha(p) for p in sorted(task.rglob('*')) if p.is_file()}
     write(pp/'task-lock.json',lock)
@@ -69,11 +96,17 @@ def install_live(root,config,out):
             def __init__(self,model=None,call_log=None,**kwargs):
                 self.model=model or config['judge']['model'];self.log=call_log or llm.CallLog()
                 self._client=RoleAPI(config,'judge').client
+            def _api(self,role):
+                from copy import deepcopy
+                chosen=role_name(role);settings=deepcopy(config)
+                if hasattr(self,'_request_timeout'):
+                    settings[chosen]['timeout_sec']=min(settings[chosen].get('timeout_sec',120),self._request_timeout)
+                return RoleAPI(settings,chosen,out/'api')
             def text(self,messages,role='unspecified',max_output_tokens=4096,**kwargs):
-                return RoleAPI(config,role_name(role),out/'api').raw(messages,max_tokens=max_output_tokens,
+                return self._api(role).raw(messages,max_tokens=max_output_tokens,
                     timeout=float(self._client.timeout))['text']
             def json_obj(self,messages,schema,schema_name='payload',role='unspecified',max_output_tokens=4096,**kwargs):
-                return RoleAPI(config,role_name(role),out/'api').json(messages,schema,schema_name,max_output_tokens,
+                return self._api(role).json(messages,schema,schema_name,max_output_tokens,
                     timeout=float(self._client.timeout))
         llm.Llm=RoutedLlm
     import support
@@ -106,8 +139,10 @@ def execute(root,row,config,out,mode,config_path=None,gate=None,episode_args=Non
             '--sample-seconds',str(episode_args.sample_seconds),'--deadline-monotonic',str(episode_args.deadline_monotonic),
             '--output-dir',str(episode_args.output_dir)])
     # The shared CLI has already calibrated this exact profile/API/runtime fingerprint.
-    if gate is None or not json.loads((gate/'gate.json').read_text()).get('passed'):
-        raise ValueError('A passed unified calibration gate is required')
+    from .cli import gate_allows_execution
+    if gate is None or not gate_allows_execution(json.loads((gate/'gate.json').read_text())):
+        raise ValueError('An approved calibration gate or explicit SWE-Live checker fallback is required')
+    write(out/'calibration-gate.json',json.loads((gate/'gate.json').read_text()))
     import docker
     from support import Manifest
     from run_fullset import get_image
@@ -121,6 +156,11 @@ def execute(root,row,config,out,mode,config_path=None,gate=None,episode_args=Non
     try:
         image,_=get_image(client,manifest)
         if ensure_gold(out,source,image.id,{'gold_seconds':row['budget']['verifier_timeout_sec']},False) is None:
+            from .native_preflight import native_preflight_report
+            diagnostic=native_preflight_report(out/'gold'/source['key'])
+            write(out/'preflight-error.json',dict(diagnostic,
+                error_category='native_reference_failure', episode_started=False,
+                error='Official reference patch did not pass native preflight; inspect the recorded test failures.'))
             raise ValueError('Native gold preflight failed; no coding score')
         gold=out/'gold'/source['key'];gold_proof(gold,manifest,image.id)
     finally:client.close()

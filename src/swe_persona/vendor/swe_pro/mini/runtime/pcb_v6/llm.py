@@ -121,6 +121,9 @@ class Llm:
             try:
                 reply = self._responses(messages, schema, name, max_output_tokens)
             except Exception as exc:  # noqa: BLE001 - transport and rate errors are retried
+                from swe_persona.api_recovery import is_api_interruption
+                if is_api_interruption(exc):
+                    raise LlmError('API transport recovery exhausted') from exc
                 last = exc
                 self.log.add({"ts": time.time(), "role": self.role, "model": self.model,
                               "schema": name, "attempt": attempt,

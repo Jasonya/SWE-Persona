@@ -45,6 +45,8 @@ Installation does not require the author's original repositories or integration 
 
 Configure only two API connections: `agent` and `user_simulator`. Persona interaction and grading both use the `user_simulator` model, endpoint, API key and request options:
 
+The default user simulator is **`gpt-6-luna` with reasoning effort `medium`**, using the Azure Responses endpoint `https://matraix.services.ai.azure.com/openai/v1/responses`. This default is independent of the coding agent model. Keep it fixed when evaluating different coding agents. Persona judges share this same simulator configuration. If `user_simulator` is omitted from the input JSON, the loader supplies this default; an explicit section overrides it.
+
 | Configuration section | Responsibility |
 | --- | --- |
 | `agent` | The coding model being evaluated; produces actions and replies to the user. |
@@ -56,7 +58,7 @@ export SWE_PERSONA_AGENT_API_KEY='YOUR_AGENT_API_KEY'
 export SWE_PERSONA_SIMULATOR_API_KEY='YOUR_SIMULATOR_API_KEY'
 ```
 
-Edit **both sections** of `configs/api.local.json`. Replace each `base_url` and `model` placeholder with your provider's endpoint and model identifier. `base_url` is the API root, such as `https://provider.example/v1`, without `/chat/completions`. `api_key_env` names an environment variable; it does not contain the key. Do not put credentials in JSON or Parquet. The two variables may hold the same key when one provider serves both connections. No separate judge key or endpoint is required.
+Edit the `agent` section of `configs/api.local.json` to select the coding model and its provider. The example already configures the default user simulator. `base_url` is the API root, such as `https://provider.example/v1` or `https://matraix.services.ai.azure.com/openai/v1`, without `/chat/completions` or `/responses`. `api_key_env` names an environment variable; it does not contain the key. Do not put credentials in JSON or Parquet. The two variables may hold the same key when one provider serves both connections. No separate judge key or endpoint is required.
 
 An example role configuration is:
 
@@ -73,7 +75,7 @@ An example role configuration is:
 }
 ```
 
-The full JSON must contain only `agent` and `user_simulator`. Both use Chat Completions in the generic example. The adapter also supports `api: "responses"`; the `swe-bench-pro-mini` coding agent specifically requires Chat Completions. Keep `user_simulator` fixed when comparing coding models; change only `agent`.
+The input JSON accepts only `agent` and `user_simulator`; `agent` is required and `user_simulator` can be omitted to use the default above. The generic example uses Chat Completions for the coding agent and Responses for the simulator. The `swe-bench-pro-mini` coding agent specifically requires Chat Completions. Keep `user_simulator` fixed when comparing coding models; change only `agent`.
 
 Interaction and grading remain separate model calls with separate prompts, allowed evidence and audit records. The simulator's approval is not itself a passing score. The loader creates an internal `judge` alias from `user_simulator` for the profile adapters; this alias may appear in `run-config.json` and logs, but is not a third API configuration. Adding a separate `judge` section to the input configuration is rejected.
 
@@ -81,10 +83,24 @@ Provider options:
 
 - `structured_output_mode`: `json_schema` requests schema-constrained output; `json_object` requests JSON mode; `prompt` supplies the schema in instructions without sending a provider `response_format`. Local validation still applies. Use `prompt` for providers that cannot enforce the schema. Setting only `strict_json_schema: false` selects `json_object`, not `prompt`.
 - `max_tokens_field`: for Chat Completions, select `max_completion_tokens` or `max_tokens` according to the provider. A positive integer limit in `request_options` overrides the profile's per-call output limit. Responses uses `max_output_tokens` instead. Reasoning models may consume this output budget before producing a visible answer.
-- `request_options`: provider-supported settings such as `temperature`, `reasoning_effort` and `extra_body`. Omit unsupported options. DeepSWE supports `reasoning_effort`, `temperature`, `top_p`, token limits, `seed`, `stop` and `extra_body`.
+- `request_options`: provider-supported settings such as `temperature`, `reasoning_effort` and `extra_body`. The shared `reasoning_effort` option is mapped to `reasoning.effort` for Responses. Omit unsupported options. DeepSWE supports `reasoning_effort`, `temperature`, `top_p`, token limits, `seed`, `stop` and `extra_body`.
 - `timeout_sec`: the API client's request timeout; some profiles supply their own per-call timeout. It is separate from the task's total time budget.
 
-For the supplied GLM-5.3 calling convention, copy `configs/api.zai.example.json` instead. It selects prompt-based structured output and `max_tokens`. The tested GLM endpoint rejected image input; it is not a compatible coding endpoint for every Lite task. A text-only endpoint is not made multimodal by this harness.
+Completion recovery uses `bounded-output-recovery-v1` in the public role API (also used by SWE-Together) and DeepSWE's host API. A JSON coding-agent call with no explicit output limit starts at 8,192 tokens for `none`/`minimal`, 16,384 for `low`, 65,536 for `medium`/`high`, and 131,072 for `xhigh`/`max`. These are harness defaults, not provider capacity guarantees. DeepSWE's JSON action backend uses this policy instead of its former fixed 10,000-token request.
+
+`length`, `max_tokens`, `max_completion_tokens`, and `max_output_tokens` all identify truncation. An automatically sized call can move to the next budget step once, up to 131,072 tokens. This retries the same request before any action executes and does not consume a format-repair attempt. The increase allowance and absolute deadline are retained through subsequent format repairs. Every generated attempt and known token usage is recorded. Truncated structured responses are rejected even when their visible text parses as JSON.
+
+An explicit token limit in `request_options` remains a hard ceiling and overrides the adapter's per-call limit. Without a configured override, an explicit per-call limit is also a hard ceiling. For example, `agent.request_options.max_completion_tokens=65536` prevents growth above 65,536; omit that setting to enable automatic growth in a caller that supplies no explicit limit. A provider HTTP 400 identifying an excessive token limit permits at most four decreases; a reported smaller provider ceiling is remembered by the client. Credentials, unsupported schemas and unrelated parameter errors are not retried by this policy. Configurations and schemas are never modified or silently downgraded.
+
+Request timeouts stay at their configured values. Transport retries, token-budget adjustments and format repairs share an absolute deadline, further bounded by the caller and episode limits where supplied. The default recovery window is three configured request timeouts plus three seconds of transport backoff; a retry never restarts that window. Simulator and judge calls retain their configured budgets and do not receive effort-based automatic increases.
+
+All six runtime profiles use `simulator-json-envelope-v1`: simulator system prompts start with an explicit JSON output protocol, followed by the original persona and task instructions. Every required field must be present, including empty strings, empty arrays and `false` when applicable. Key order is unrestricted. User messages and private audit rationale belong in their designated fields; no prose or Markdown fences may appear outside the JSON object.
+
+Examples are validated against the current response schema and use current allowed actions, document IDs and observation values. They illustrate structure and cannot grant permissions, disclose future requirements or approve task completion. DeepSWE's document-selection recovery shows empty `message` and `closing`; SWE-Together's acceptance fields appear only in its acceptance example when the current completion gates permit it. Existing schema validation, controller checks, format repair and recoverable judge handling remain active. The protocol applies to prompts loaded from existing Parquet rows as well as newly generated prompts. Changed prompts require a fresh runtime fingerprint and calibration for new scored attempts.
+
+The JSON action agents for DeepSWE, SWE-Together and Terminal-Bench 3 use `coding-agent-json-envelope-v1`. Their system prompts start with an explicit response protocol and a section for each action field. All required fields must be present; key order is unrestricted. User-facing plans, questions and handoffs belong inside the designated JSON string. Examples are checked against each runtime's existing action schema, contain no task-specific file names or feature requests, and cannot introduce permissions or an additional approval step. Completion actions remain claims for user/controller review, not declarations that native or persona grading passed.
+
+Rejected actions execute nothing. DeepSWE's protocol repair keeps the same schema, output budget and deadline, and identifies its feedback as host transport feedback rather than a user request. Scope and command-approval controls remain enforced by the existing controllers. Prompt changes require a fresh runtime fingerprint and calibration for new scored attempts.
 
 ## 3. Check the dataset before making API calls
 
@@ -93,6 +109,15 @@ swe-persona validate --dry-run --output runs/preflight
 ```
 
 This checks all 100 rows, their content and assets, and the profile reconstruction/import paths. It starts no containers and makes no API calls. It does not establish that remote images are available or that a model can finish every task.
+
+For a SWE-Live reference stability check, run:
+
+```bash
+python scripts/check_live_native.py --task swelive/0262-go--laptop_data_scientist \
+  --repetitions 3 --output runs/live-native-check
+```
+
+Omit `--task` to check all 19 SWE-Live pairs. This starts fresh CPU containers and runs the unchanged official reference patch and tests, without model calls. It retains every repetition; any failure makes the check fail, even if later repetitions pass. It is a diagnostic release gate, not a task score or permission to retry candidate results until they pass. A reference failure must be investigated before claiming that the affected pair is reproducible. Scored SWE-Live attempts write `preflight-error.json` with the failed test IDs and `episode_started: false` when the reference fails.
 
 Inspect task metadata without reading binary assets:
 
@@ -141,7 +166,19 @@ The selected row's `interaction.profile_id` chooses the scaffold automatically. 
 | `swe-together` | API JSON shell agent with native follow-up disclosure and grounded persona checks. |
 | `deep-swe` | API JSON action agent with the frozen staged interaction plan. |
 
+### DeepSWE public evidence and simulator recovery
+
+For a disclosed `grounded_explanation` requirement, the host records the registered public probes before rendering the next user message. An explanation required before implementation receives baseline observations only; a candidate explanation receives baseline and committed-candidate observations once implementation is authorized. Records are cached by probe ID and candidate patch digest; changed patches get new records. This measurement does not mark the requirement met or start final-quality acceptance early. Future, undisclosed probes are not run by this path. A failed public case is still delivered as an observed failure and may support an honest explanation.
+
+Completion uses the structured action `{"action":"reply","phase":"done"}`. Completion prose in a working-phase reply does not emit that event. Simulator and review contexts distinguish these facts; requests for the event must not falsely assert that the agent never said it was done.
+
+The simulator first renders ordinary prose and explicitly selects every current public document. One internal prose repair is allowed. If prose review still rejects the draft or returns unknown, one final simulator call selects the same documents with empty opening and closing prose. The host resolves only valid model-selected document IDs to their unchanged original bodies. This mode cannot add instructions, alter check statuses, authorize a transition or approve a rejected draft. Missing or future document IDs, malformed schema, receipt mismatches and cancellation still fail validation. No extra coding-agent turn is consumed by these internal repairs. Successful recovery is recorded in `simulator_message_recoveries`; native and persona final grading remain mandatory. These changes require a fresh runtime fingerprint and calibration for new scored attempts.
+
 The two SWE-bench Pro implementations are packaged together under `src/swe_persona/vendor/swe_pro/`: `mini/` serves `swe-bench-pro-mini` and `shell/` serves `swe-bench-pro-shell`. The task profile selects the appropriate implementation automatically.
+
+The shell adapter exports the frozen binding with `applicability.verdict: "applicable"`. Both dry runs and scored episodes use `registry.build_candidates` and `applicable_candidates`; preparation checks that all Parquet requirement IDs are loaded. Missing or contradictory applicability cannot silently turn a binding into an empty requirement list. The controller reads the shared passed calibration gate and validates its grading identity before registering these requirements in the ledger. Original event triggers, disclosure limits and optional/required schedule flags remain binding.
+
+A progressive shell episode cannot earn joint credit with no persona checks. Final grading must cover every required or activated requirement. Missing loading or missing final checks is reported separately from a demonstrated persona violation; an unavailable persona grade is `null`. Result normalization compares the episode's loaded and graded IDs against the immutable row and disclosure record, so stale or inconsistent `joint_success` fields cannot manufacture a pass. Valid preserved work after an API interruption still follows the common recovery policy. These runtime changes require fresh calibration and new attempts; old episodes without persona disclosure cannot be repaired by post hoc grading.
 
 These profiles share the public API configuration and command-line interface; their action protocols, schedules and graders remain source-specific. Harbor manages coding environments, and adapters also use Docker directly for snapshots and verification. To evaluate another **model**, change `agent` in the JSON configuration. This distribution does not expose a universal `--agent-class` plug-in or a standalone `/user-simulator` HTTP service. Replacing the scaffold itself requires adapting the profile code and constitutes a different evaluation setting.
 
@@ -162,7 +199,7 @@ This snippet makes two real API calls. It only checks the clients; it does not l
 
 ### Calibration and information boundaries
 
-Calibration runs automatically before a scored episode. It may make model calls and start containers. A failed gate produces `calibration_error`; it must be resolved before the episode is scored. Successful gates are cached by profile, API configuration and runtime fingerprint under `~/.cache/swe-persona`. Use `--cache /path/to/cache` on `run` or the batch script to choose another location.
+Calibration runs automatically before a scored episode. It may make model calls and start containers. A failed semantic gate produces `calibration_error` and blocks episodes for that profile. Other profiles in the batch continue. Gates are cached by profile, API configuration and runtime fingerprint under `~/.cache/swe-persona`. Use `--cache /path/to/cache` on `run` or the batch script to choose another location. SWE-bench-Live has a restricted fallback for unavailable calibration assessments, described below; a degraded gate is never reported as a passed calibration.
 
 API clients run on the host. Simulator and judge calls share the `user_simulator` connection settings while retaining separate role contexts. The controller supplies each role's permitted view; the agent is not given the entire Parquet row, hidden requirements, reference controls or protected tests. Some calibration fixtures and the SWE-Live native preflight contain host-only reference material required by their protocols. Do not mount the distribution or host cache wholesale into the coding container. The evaluator can inspect all distributed assets: this is an open benchmark, not a hidden-test service.
 
@@ -195,7 +232,7 @@ python scripts/evaluate.py \
 
 The variable accepts one host GPU index or UUID; choose a device allocated to you. CPU tasks receive no GPU reservation. Different GPU hardware must be reported as an environment variant.
 
-Optional batch selectors are `--source-benchmark "SWE-bench Pro"`, `--profile swe-bench-pro-shell` and `--limit N`. `--dataset` defaults to Lite. The driver runs sequentially, stores per-task outputs in numbered directories and updates `summary.json`. It stops on calibration failure and reports other invalid/error outcomes separately. It returns exit code 0 only when every selected task has a valid pass/fail result (or a successful dry run); a valid model failure does not make the command itself fail. Repeated attempts must use separate directories and must not be combined by selecting the best score.
+Optional batch selectors are `--source-benchmark "SWE-bench Pro"`, `--profile swe-bench-pro-shell` and `--limit N`. `--dataset` defaults to Lite. The driver runs up to two task workers concurrently by default; use `--workers N` to change this or `--workers 1` for sequential evaluation. Within a batch, each runtime profile is calibrated once before its tasks start, with calibration evidence shared through the cache. Each task uses its own numbered output directory and driver log. `summary.json` is updated atomically after task completions, preserves dataset order, and includes active tasks and worker count. A failed calibration blocks only its own profile: affected rows receive `calibration_error` with `episode_started: false`, `blocked_profiles` identifies the affected profiles, and other profiles continue. SIGINT/SIGTERM stops launching tasks and interrupts active task processes for cleanup. Invalid/error outcomes are reported separately. The command returns exit code 0 only when every selected task has a valid pass/fail result (or a successful dry run); a valid model failure does not make the command itself fail. Repeated attempts must use separate directories and must not be combined by selecting the best score.
 
 ## 6. Time budgets
 
@@ -225,6 +262,32 @@ python scripts/evaluate.py \
 The common `worker-wall-clock-v1` limit includes worker startup, image/environment preparation, native preflight, agent and simulator work, judges, and final verification. Prior calibration and input materialization are outside this clock. Existing profile-specific coding, turn, action and verification limits still apply; increasing the outer cap does not disable them. Cleanup receives a bounded grace period outside the scoring budget.
 
 A total timeout is recorded as `status: "fail"`, `outcome_reason: "total_timeout"` and zero joint credit. Missing native/persona grades remain unknown. Compare runs under the same budget policy and record overrides; do not silently extend short defaults to obtain a better score.
+
+### API timeout recovery across all subsets
+
+Every executable profile uses `api-recovery-and-artifact-assessment-v1`: Terminal-Bench 3.0, SWE-bench Pro mini/shell, SWE-bench-Live, SWE-Together, and DeepSWE. A transient API timeout, connection error, rate limit, or server error is retried up to three total HTTP attempts, with 1- and 2-second backoff. The configured API timeout limits each HTTP attempt; retries and backoff consume the existing interaction/sample budget. SDK retries and outer transport retries do not multiply this limit. A cancelled task, authentication failure, or schema violation is not treated as a transient API timeout. JSON format repair remains a separate bounded operation.
+
+If transport recovery is exhausted, the controller preserves the current workspace and transcript and attempts its independent final native/persona verification within the remaining budget. It does not replay shell commands, restart the task, invent user approvals, or substitute online judge results for missing final grades. Preserved work can be a patch, a task artifact, a substantive agent message, or recorded completed agent tool work, depending on the profile. A run with no usable work or no final artifacts is `infrastructure_error`. A run with preserved work passes only when independent native and persona verification both pass; an unmet or unverified required component receives `fail` and zero joint credit. Missing component grades remain `null`, and `verification_complete` records whether both components were graded. Artifact integrity violations remain `invalid`. Total task/interaction deadlines retain precedence and score as failures.
+
+Recovery attempts are audited in `transport-recovery.jsonl` (DeepSWE also records recovery events in its API JSONL). Interrupted results include `outcome_reason: "api_interrupted"` and `api_recovery_assessment`, including available artifacts, agent progress, observed component grades, and the assessment policy. This changes the runtime fingerprint, invalidates earlier calibration caches, and requires fresh calibration for subsequent real evaluation. Results produced under the earlier policy should remain separate.
+
+### Recoverable online requirement assessments
+
+Online assessments use `registered-refs-internal-recovery-v2`. In Terminal-Bench 3.0, the judge returns criterion statuses and `evidence_refs`: registered agent-message IDs after the requirement disclosure. The response schema enumerates eligible IDs and frozen requirement/criterion IDs. The judge never copies or generates evidence quotations. The controller retrieves the original ledger text unchanged and records it in `requirement-judge-audit/review-evidence.jsonl`. Local validation still checks criterion coverage, valid evidence IDs, nonempty evidence for `MET`, verdict aggregation, and actionable feedback.
+
+A semantically invalid assessment receives at most two total assessment attempts against the same evidence and rubric, with controller validation feedback on the second attempt. Both share the original assessment deadline and consume the existing sample budget. Transport recovery and JSON format repair retain their own bounded limits; exhausted transport calls are not retried again by the assessment layer. Rejections are audited in `requirement-judge-audit/review-recovery.jsonl`.
+
+An internal judge failure is **assessment unavailable**, separate from a valid `UNOBSERVABLE` verdict. It preserves the last accepted verdict, blocks acceptance and dependent requirement disclosure, and does not call the user simulator, add a corrective user message, or consume a user turn solely to fix the judge. At a progress checkpoint the agent continues working. At completion, persistent assessment failure ends interaction with `online_judge_unavailable`, preserves the current artifacts, and runs independent final native/persona verification within the remaining budget. Only complete passing verification earns joint credit; unresolved required grades remain unknown and receive zero joint credit when usable work is present. A previous online `MET` alone cannot establish final success. Genuine validated unmet or unobservable requirements still receive normal user feedback.
+
+SWE-Together also retries invalid assessments internally at most twice, retains accepted verdicts in `last_valid_verdicts`, and records unavailable assessments as `unknown` with separate `judge_errors`. It does not turn internal judge errors into requests for repeated explanations or permanent invalid flags. A completion assessment that remains unavailable stops interaction for final verification. Later valid assessments can restore readiness; frozen bindings, evidence integrity, simulator policy checks, and total deadlines retain their existing requirements. These protocol changes require fresh calibration and a separate evaluation batch.
+
+### SWE-bench-Live calibration and judge fallback
+
+The SWE-Live runtime uses `swe-live-tb3-handoff-loop-v3`; the dataset's original handoff requirements remain unchanged and their source protocol is recorded separately. Calibration and online judgments use the same registered `evidence_refs` schema, eligible message IDs, prompts and validation. Up to two assessment attempts share one bounded deadline and identical evidence. Exhausted transport requests are not retried again by this layer. Original message text is retrieved by the controller and saved unchanged in the judge audit.
+
+All 12 calibration controls are processed even when an assessment remains unavailable. Such controls are recorded as `status: "unknown"` with `assessment_unavailable: true` and error diagnostics; they do not pass. A validated verdict outside a control's expected verdicts is a semantic failure and blocks this profile. When there are unavailable controls but no semantic failures, calibration is explicitly `status: "degraded"`, `passed: false`, `execution_allowed: true`, with `independent_checker_required: true`. Incomplete calibration reports cannot authorize execution. The unified gate, run configuration and calibration report preserve this distinction.
+
+This fallback applies only to the complete literal handoff contract implemented by SWE-Live's frozen deterministic checker: exact labeled lines, nonempty bullet bodies, the word limit, and the manager's code-marker restrictions. Materialization verifies that the checker covers the entire frozen disclosure and rubric before permitting execution. It cannot grade arbitrary persona requirements or repair correctness. If an online model assessment remains unavailable, its audit retains `unknown`; a separate `independent_frozen_handoff_checker` assessment can resolve this literal contract and support ordinary interaction without asking the agent to repair judge output. Its diagnostic `assessment_recovery` is retained in the episode. Genuine handoff violations still receive corrective feedback. Final independent native verification and persona checking remain mandatory; unknown calibration alone earns no task credit. Cancellation, artifact integrity failures and sample deadlines retain precedence.
 
 ## 7. Read complete scores and evidence
 
@@ -275,6 +338,8 @@ One Parquet row contains one frozen task/persona pair. `source_benchmark` identi
 
 The materializer reconstructs hash-checked build contexts, tests and controller bindings. Images and external downloads remain runtime dependencies. Source trajectories and historical model scores are not required for evaluation. The Lite sample is a fixed proportional sample of an adapted cohort, not a claim of an unbiased sample of all upstream tasks; the DeepSWE source cohort was retrospectively curated.
 
-This release does **not** claim that all 100 tasks have completed end-to-end validation with GLM-5.3. Image support, valid structured responses, available external images/assets, and adequate task-specific resources are required. Previous model runs were stopped; they are not bundled or silently resumed by this distribution. A new `run` command starts a new attempt and its own required calibration. No task has been removed or replaced to improve model results.
+This release does **not** claim that all 100 tasks have completed successful environment and end-to-end validation. Image support, valid structured responses, available external images/assets, and adequate task-specific resources are required. The SWE-Live `swelive/0262-go--laptop_data_scientist` reference has produced an intermittent failure in `Test_handler_download_logs`; a later successful check does not erase that observation or certify stability. Historical model runs are not bundled or silently resumed by this distribution. A new `run` command starts a new attempt and its own required calibration. No task has been removed or replaced to improve model results.
+
+Before publishing a reproducibility claim, verify the release checksums, install the built wheel in a clean environment, complete all 100 dry runs, inspect reference stability reports, and obtain valid scored attempts for every included pair with the documented simulator configuration. Calibration and infrastructure errors are unresolved evaluations, not capability failures. Run the local regression suite with `python -m unittest discover -s tests -v`; it makes no external model calls or real container launches.
 
 Harness code is MIT-licensed. Upstream code, tests and assets retain their own licenses. Preserve the included notices under `src/swe_persona/vendor/` and the task notices identified by `source.license_asset_ids`; the harness license does not relicense upstream material.
