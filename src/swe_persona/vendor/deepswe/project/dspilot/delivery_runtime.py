@@ -207,7 +207,16 @@ def worker_env(project, pair, runtime, env_file=None):
     env = os.environ.copy()
     for key in ('DS_TASK_ID', 'DS_PERSONA_ID', 'DS_PROTOCOL', 'DS_STAGED_PLAN_PATH', 'DS_RUNTIME', 'DS_CODING_BACKEND', 'PYTHONPATH'):
         env.pop(key, None)
-    env.update(PYTHONPATH=str(project), PYTHONDONTWRITEBYTECODE='1', DS_TASK_ID=pair['task_id'],
+    # Keep the exact host package that launched this worker. A private wheel
+    # installation may not be on site-packages; discarding its root silently
+    # imports a different installed release in the child. Do not inherit
+    # arbitrary ambient import paths into the portable project.
+    paths = [str(project)]
+    package = sys.modules.get('swe_persona')
+    package_file = getattr(package, '__file__', None)
+    if package_file:
+        paths.append(str(Path(package_file).resolve().parent.parent))
+    env.update(PYTHONPATH=os.pathsep.join(paths), PYTHONDONTWRITEBYTECODE='1', DS_TASK_ID=pair['task_id'],
                DS_PERSONA_ID=pair['persona_id'], DS_PROTOCOL='staged', DS_CODING_BACKEND='json_act' if runtime=='harbor' else 'native_act', DS_RUNTIME=runtime)
     if env_file: env['DS_PERSONA_ENV_FILE'] = str(Path(env_file).resolve())
     return env

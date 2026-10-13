@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import re
 import uuid
@@ -15,10 +16,35 @@ from checkers import CheckerRegistry
 from dockerx import Container, Mount
 from llm import CallLog, Llm
 from registry import build_candidates
-from task_adapter import TaskManifest
-from rubric_checker import GROUNDING_PROTOCOL, grading_identity
+from task_adapter import TaskManifest, DATASET_ID, DATASET_REVISION, HARNESS_REVISION
+from rubric_checker import GROUNDING_PROTOCOL, CLAUSE_PROTOCOL, grading_identity
 
 HERE = Path(__file__).resolve().parent
+
+
+def packaged_calibration_fixture(path=None):
+    """Load the same pinned control without an HF or official-script cache."""
+    path = Path(path) if path is not None else HERE / "fixtures/rubric-calibration.json"
+    raw = path.read_bytes()
+    fixture = json.loads(raw)
+    if (fixture.get("protocol") != "packaged-rubric-control-v1"
+            or fixture.get("dataset") != {"id": DATASET_ID, "revision": DATASET_REVISION,
+                                           "row_index_zero": 43}
+            or fixture.get("harness_revision") != HARNESS_REVISION):
+        raise ValueError("Calibration fixture provenance does not match the pinned control")
+    manifest = TaskManifest.from_row(fixture["row"], 43)
+    if manifest.selection_record() != fixture.get("selection_record"):
+        raise ValueError("Calibration fixture task identity or field hashes changed")
+    assets = fixture.get("official_assets", {})
+    hashes = fixture.get("asset_sha256", {})
+    if set(assets) != {"run_script.sh", "parser.py"} or set(hashes) != set(assets):
+        raise ValueError("Calibration fixture is missing official assets")
+    for name, body in assets.items():
+        if not isinstance(body, str) or not body.strip() or hashlib.sha256(body.encode()).hexdigest() != hashes[name]:
+            raise ValueError("Calibration fixture asset hash mismatch: " + name)
+    return manifest, assets, {"protocol": fixture["protocol"],
+        "file_sha256": hashlib.sha256(raw).hexdigest(), "dataset": fixture["dataset"],
+        "harness_revision": fixture["harness_revision"], "asset_sha256": hashes}
 
 
 def unique_name(prefix):
@@ -76,17 +102,23 @@ def main() -> int:
         choices=("scope_good", "scope_omits_unrelated", "explanation_good", "explanation_generic"),
         help="rerun one gate case and merge it into the existing model report",
     )
-    parser.add_argument("--dataset-index", type=int, default=44)
+    parser.add_argument("--dataset-index", type=int, default=None,
+                        help="Explicit upstream control override; default uses the packaged pinned control")
     parser.add_argument("--index-base", type=int, choices=[0, 1], default=1)
     parser.add_argument("--out", type=Path, default=HERE / "runs" / "validation")
     args = parser.parse_args()
     # Docker bind mounts require absolute host paths, including public contracts.
     args.out = args.out.resolve()
     args.out.mkdir(parents=True, exist_ok=True)
-    manifest = TaskManifest.from_dataset(dataset_index=args.dataset_index, index_base=args.index_base)
+    if args.dataset_index is None:
+        manifest, official_assets, fixture_identity = packaged_calibration_fixture()
+    else:
+        manifest = TaskManifest.from_dataset(dataset_index=args.dataset_index, index_base=args.index_base)
+        official_assets, fixture_identity = None, {"protocol": "explicit-upstream-control"}
     run_dir = args.out / f"rubric-row-{manifest.row_index_zero + 1:03d}"
     run_dir.mkdir(parents=True, exist_ok=True)
-    assets = manifest.materialize_checker_assets(run_dir / ".checker_assets", HERE / "fixtures")
+    assets = manifest.materialize_checker_assets(run_dir / ".checker_assets", HERE / "fixtures",
+                                               official_assets=official_assets)
     pulled = not dockerx.image_exists(manifest.docker_image)
     if pulled:
         dockerx.pull_image(manifest.docker_image)
@@ -153,6 +185,8 @@ def main() -> int:
         report = {
             "grading_identity": grading_identity(),
             "calibration_protocol": "public-subchecks-v2",
+            "clause_protocol": CLAUSE_PROTOCOL,
+            "calibration_fixture": fixture_identity,
             "task": manifest.selection_record(),
             "history_guard": guard,
             "judge_model": args.judge_model,
@@ -167,6 +201,7 @@ def main() -> int:
                 and previous.get("samples") == args.samples
                 and previous.get("grading_identity") == grading_identity()
                 and previous.get("calibration_protocol") == "public-subchecks-v2"
+                and previous.get("calibration_fixture") == fixture_identity
             ):
                 report["arms"] = dict(previous.get("arms") or {})
         for name, image, digest, candidate, transcript, expected in cases:
@@ -189,6 +224,9 @@ def main() -> int:
                 "ok": ok,
                 "agreement": result.evidence.get("judge_agreement_mean"),
                 "error_category": result.evidence.get("error_category"),
+                "clauses": {cid: {key: clause[key] for key in
+                    ("group", "clause", "condition_holds", "votes", "reasons") if key in clause}
+                    for cid, clause in result.evidence.get("clauses", {}).items()},
             }
             print(f"{name:25s} {result.status:8s} {'ok' if ok else 'FAIL'}", flush=True)
         expected_names = {name for name, *_rest in cases}

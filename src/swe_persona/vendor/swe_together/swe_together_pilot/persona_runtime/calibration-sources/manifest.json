@@ -1,0 +1,85 @@
+{
+  "protocol": "swe-together-calibration-sources-v1",
+  "files": [
+    {
+      "path": "tasks/agent-swarm-task-ea4bd8/tests/test.sh",
+      "url": "https://raw.githubusercontent.com/Togetherbench/SWE-Together/0580198258e9c48e22b48de53cf0902777e4eb05/tasks/agent-swarm-task-ea4bd8/tests/test.sh",
+      "sha256": "dd15f95844312b3574adfcd34d0f96ef81145d31e64db339a2e9864dc103969d"
+    },
+    {
+      "path": "tasks/agent-swarm-task-ea4bd8/tests/test_manifest.yaml",
+      "url": "https://raw.githubusercontent.com/Togetherbench/SWE-Together/0580198258e9c48e22b48de53cf0902777e4eb05/tasks/agent-swarm-task-ea4bd8/tests/test_manifest.yaml",
+      "sha256": "bfad9aa558c91ded5b7c59bf507d84df3db349907cadb44efe226cb7b34b2d30"
+    },
+    {
+      "path": "tasks/amytis-task-e3714e/tests/test.sh",
+      "url": "https://raw.githubusercontent.com/Togetherbench/SWE-Together/0580198258e9c48e22b48de53cf0902777e4eb05/tasks/amytis-task-e3714e/tests/test.sh",
+      "sha256": "76deb15a68782ad91893f26788c79e36de43f373db6a7d050e685ba81736a723"
+    },
+    {
+      "path": "tasks/amytis-task-e3714e/tests/test_manifest.yaml",
+      "url": "https://raw.githubusercontent.com/Togetherbench/SWE-Together/0580198258e9c48e22b48de53cf0902777e4eb05/tasks/amytis-task-e3714e/tests/test_manifest.yaml",
+      "sha256": "6c16df0e30eee1d56d7a42b6e3ec14c12cace10729a5c380d2298a6d106f7f93"
+    },
+    {
+      "path": "tasks/cli-task-70c88c/tests/test.sh",
+      "url": "https://raw.githubusercontent.com/Togetherbench/SWE-Together/0580198258e9c48e22b48de53cf0902777e4eb05/tasks/cli-task-70c88c/tests/test.sh",
+      "sha256": "1dc8fed8e99290b16a0e383e425b8d03fb1c2dc1ce81445f8cbedac5c533ca47"
+    },
+    {
+      "path": "tasks/cli-task-70c88c/tests/test_manifest.yaml",
+      "url": "https://raw.githubusercontent.com/Togetherbench/SWE-Together/0580198258e9c48e22b48de53cf0902777e4eb05/tasks/cli-task-70c88c/tests/test_manifest.yaml",
+      "sha256": "e7c4062c9b9544699152487f3cc100e9844c96f0d9dd581dcc0a575ca747c56a"
+    },
+    {
+      "path": "tasks/dataclaw-anonymizer-tests/environment/Dockerfile",
+      "url": "https://raw.githubusercontent.com/Togetherbench/SWE-Together/0580198258e9c48e22b48de53cf0902777e4eb05/tasks/dataclaw-anonymizer-tests/environment/Dockerfile",
+      "sha256": "8f629b1548d965de94998e72716670f7b1c9daed0c5fc83c6e03565afaf5f2a3"
+    },
+    {
+      "path": "tasks/dataclaw-anonymizer-tests/environment/windows_anonymizer.py",
+      "url": "https://raw.githubusercontent.com/Togetherbench/SWE-Together/0580198258e9c48e22b48de53cf0902777e4eb05/tasks/dataclaw-anonymizer-tests/environment/windows_anonymizer.py",
+      "sha256": "56de4431cdf48a4033ad3bd38184fdace30e7a4355f13bdd0ac665dc30b4c709"
+    },
+    {
+      "path": "tasks/dataclaw-anonymizer-tests/environment/windows_test_anonymizer.py",
+      "url": "https://raw.githubusercontent.com/Togetherbench/SWE-Together/0580198258e9c48e22b48de53cf0902777e4eb05/tasks/dataclaw-anonymizer-tests/environment/windows_test_anonymizer.py",
+      "sha256": "d64de65a4c5d57c5d17a094220d2452f562b6e587362faa3934d5521f1b72469"
+    },
+    {
+      "path": "tasks/agent-swarm-task-ea4bd8/tests/install_config.json",
+      "url": "https://raw.githubusercontent.com/Togetherbench/SWE-Together/0580198258e9c48e22b48de53cf0902777e4eb05/tasks/agent-swarm-task-ea4bd8/tests/install_config.json",
+      "sha256": "4a71720c745493e4404fa1de6e1a31af4367cacc31ae758df073dac71ba379ca"
+    },
+    {
+      "path": "tasks/amytis-task-e3714e/tests/install_config.json",
+      "url": "https://raw.githubusercontent.com/Togetherbench/SWE-Together/0580198258e9c48e22b48de53cf0902777e4eb05/tasks/amytis-task-e3714e/tests/install_config.json",
+      "sha256": "4133e0cfedb42422515cf94eb5bc781b47ce850474255626c7e9eeb867025585"
+    },
+    {
+      "path": "tasks/cli-task-70c88c/tests/install_config.json",
+      "url": "https://raw.githubusercontent.com/Togetherbench/SWE-Together/0580198258e9c48e22b48de53cf0902777e4eb05/tasks/cli-task-70c88c/tests/install_config.json",
+      "sha256": "8037a4ab10dbd319632aebda2e257ac7b24729bd2fd51baf7511308f879b8d41"
+    },
+    {
+      "path": "repositories/agent-swarm/package.json",
+      "url": "https://raw.githubusercontent.com/desplega-ai/agent-swarm/c3a5e1a4c0eeadd87057629db2baa0d0abe1575e/package.json",
+      "sha256": "a40973f281b4dc1431f4e576ec5b0b0bb7d582a45dcfe107626b82f611fc7058"
+    },
+    {
+      "path": "repositories/amytis/package.json",
+      "url": "https://raw.githubusercontent.com/hutusi/amytis/e0a5f415434c1588b9950dd5e55757fe14e7630a/package.json",
+      "sha256": "36b14efeb56a930343072737d17e2e68654b9ea8803e6b72e5c3be099dace378"
+    },
+    {
+      "path": "repositories/dataclaw/dataclaw/anonymizer.py",
+      "url": "https://raw.githubusercontent.com/peteromallet/dataclaw/3c0991467af69675afa948c3ada45475a772fbeb/dataclaw/anonymizer.py",
+      "sha256": "5ebdc75b4d61664280a8d5b00b6ea89dfa140515599f2ddd7c298f785df23124"
+    },
+    {
+      "path": "repositories/dataclaw/tests/test_anonymizer.py",
+      "url": "https://raw.githubusercontent.com/peteromallet/dataclaw/3c0991467af69675afa948c3ada45475a772fbeb/tests/test_anonymizer.py",
+      "sha256": "8b20be9ba7f98dd5f4bf72baa9a14110e9816d7c671409f947d2f7789df1e48a"
+    }
+  ]
+}

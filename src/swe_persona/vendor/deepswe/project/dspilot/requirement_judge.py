@@ -235,7 +235,10 @@ def visible_references(eligible):
     refs={}
     for event in eligible:
         for line in event['content'].splitlines():
-            if line.strip():refs[f'visible_{len(refs):06d}']={'event_id':event['event_id'],'quote':line}
+            # Apply the same provenance rule used after resolution. A nonempty
+            # punctuation-only line (e.g. a JSON closing brace) is not evidence.
+            if match_quote(line,event['content']) is not None:
+                refs[f'visible_{len(refs):06d}']={'event_id':event['event_id'],'quote':line}
     return refs
 
 

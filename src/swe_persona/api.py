@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator, ValidationError
 from openai import APIStatusError, OpenAI
 from .api_recovery import append_audit, retry_transport
 from .api_output import POLICY as OUTPUT_POLICY, IncompleteOutputError, OutputBudget, configured_limit, is_truncated
+from .output_mode import POLICY as FORMAT_POLICY, OutputModeFallback, configured_mode, mode_messages
 
 ROLES = ('agent', 'user_simulator', 'judge')
 PUBLIC_ROLES = ('agent', 'user_simulator')
@@ -20,6 +21,7 @@ DEFAULT_USER_SIMULATOR_CONFIG = {
     'api_key_env': 'SWE_PERSONA_SIMULATOR_API_KEY',
     'strict_json_schema': True,
     'structured_output_mode': 'json_schema',
+    'structured_output_fallback': True,
     'timeout_sec': 300,
     'request_options': {'reasoning_effort': 'medium', 'max_output_tokens': 32768},
 }
@@ -39,6 +41,7 @@ def load_config(path, require_keys=False):
         for key in ['model','base_url','api_key_env','api']:
             if not isinstance(c.get(key),str) or not c[key]: raise ValueError(f'{role}.{key} is required')
         if c['api'] not in {'chat_completions','responses'}: raise ValueError('Unsupported API transport')
+        configured_mode(c)
         if not c['base_url'].startswith(('https://','http://localhost','http://127.0.0.1')):
             raise ValueError('Use HTTPS or a local API endpoint')
         if c['api']=='responses':responses_options(c)
@@ -104,6 +107,8 @@ class RoleAPI:
         self.client=OpenAI(base_url=c['base_url'],api_key=key,max_retries=0,
                            timeout=float(c.get('timeout_sec',120)))
         self._output_ceiling=None
+        self._format=OutputModeFallback(c['base_url'],c['model'],c['api'],configured_mode(c),
+                                       c.get('structured_output_fallback',True))
 
     def output_budget(self, schema, max_tokens=None):
         options=self.config.get('request_options',{})
@@ -131,15 +136,7 @@ class RoleAPI:
                 message['content']=blocks
             converted.append(message)
         messages=converted
-        mode=c.get('structured_output_mode','json_schema' if c.get('strict_json_schema',True) else 'json_object')
-        if mode not in {'json_schema','json_object','prompt'}: raise ValueError('Invalid structured_output_mode')
-        strict=mode=='json_schema'
-        if schema is not None and not strict:
-            instruction='\nOutput transport: return ONLY one JSON object satisfying this schema, with no prose outside it. Natural-language role content belongs INSIDE the appropriate JSON string fields. Schema: '+json.dumps(schema)
-            indices=[i for i,m in enumerate(messages) if m.get('role')=='system' and isinstance(m.get('content'),str)]
-            if indices:
-                index=indices[-1];messages[index]=dict(messages[index],content=messages[index]['content']+instruction)
-            else:messages=[{'role':'system','content':instruction}]+messages
+        mode=self._format.mode
         request_timeout=float(c.get('timeout_sec',120))
         deadline=time.monotonic()+float(timeout if timeout is not None else 3*request_timeout+3)
         if _deadline is not None:deadline=min(deadline,_deadline)
@@ -153,16 +150,18 @@ class RoleAPI:
         started=time.monotonic()
         total_input=total_output=0
         while True:
+            request_messages=mode_messages(messages,schema,mode)
+            strict=mode=='json_schema'
             options=responses_options(c) if c['api']=='responses' else chat_token_options(c)
             for field in ('max_tokens','max_completion_tokens','max_output_tokens'):options.pop(field,None)
             if c['api']=='responses':
-                kwargs={'model':c['model'],'input':messages,'store':False,**options,'max_output_tokens':budget.current}
+                kwargs={'model':c['model'],'input':request_messages,'store':False,**options,'max_output_tokens':budget.current}
                 if schema is not None and strict:kwargs['text']={'format':{'type':'json_schema','name':name,'strict':True,'schema':schema}}
                 elif schema is not None and mode=='json_object':kwargs['text']={'format':{'type':'json_object'}}
                 operation=lambda seconds:self.client.with_options(timeout=seconds).responses.create(**kwargs)
             else:
                 field=c.get('max_tokens_field',extra.get('max_tokens_field','max_completion_tokens'))
-                kwargs={'model':c['model'],'messages':messages,**options,field:budget.current}
+                kwargs={'model':c['model'],'messages':request_messages,**options,field:budget.current}
                 if schema is not None and mode!='prompt':
                     kwargs['response_format']={'type':'json_schema','json_schema':{'name':name,'strict':True,'schema':schema}} if strict else {'type':'json_object'}
                 operation=lambda seconds:self.client.with_options(timeout=seconds).chat.completions.create(**kwargs)
@@ -170,9 +169,16 @@ class RoleAPI:
                 response=retry_transport(operation,request_timeout=request_timeout,deadline=deadline,audit=audit)
             except APIStatusError as error:
                 old_limit=budget.current
-                if not budget.shrink(error.status_code,error.message):raise
-                self._output_ceiling=budget.ceiling
-                audit({'policy':OUTPUT_POLICY,'status':'token_ceiling','from':old_limit,'to':budget.current})
+                if budget.shrink(error.status_code,error.message):
+                    self._output_ceiling=budget.ceiling
+                    audit({'policy':OUTPUT_POLICY,'status':'token_ceiling','from':old_limit,'to':budget.current})
+                    continue
+                next_mode=self._format.reject(mode,error.status_code,error.message) if schema is not None else None
+                if next_mode is None:raise
+                audit({'policy':FORMAT_POLICY,'status':'mode_fallback','from':mode,'to':next_mode,
+                       'http_status':error.status_code,'reason':'provider_rejected_output_mode',
+                       'action_executed':False})
+                mode=next_mode
                 continue
             usage=response.usage
             if c['api']=='responses':
@@ -194,7 +200,8 @@ class RoleAPI:
                     'requested_max_tokens':budget.current,'finish_reason':finish,'incomplete_reason':reason,
                     'reasoning_tokens':getattr(token_details,'reasoning_tokens',None),
                     'reasoning_content_chars':len(reasoning_content) if isinstance(reasoning_content,str) else None,
-                    'messages':messages,'output':text})
+                    'structured_output_mode':mode,'configured_output_mode':self._format.initial,
+                    'messages':request_messages,'output':text})
             old_limit=budget.current
             if budget.grow(reason):
                 audit({'policy':OUTPUT_POLICY,'status':'length_retry','reason':reason,

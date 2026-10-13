@@ -18,7 +18,7 @@ from openai import APIConnectionError, RateLimitError, InternalServerError
 from .api import RoleAPI, load_config, fingerprint
 from .binding import validate, PILOT
 from .evaluation import seal_evidence, artifact_snapshot
-from .simulator import UserSimulator, initial_persona_message
+from .simulator import UserSimulator, initial_persona_message, decision_schema
 from swe_persona.api_recovery import assess_interrupted, is_api_interruption
 from swe_persona.agent_output import action_envelope
 
@@ -63,36 +63,54 @@ def runtime_hash():
     for p in sorted((PILOT/'full109/bindings').glob('*.json')):h.update(p.name.encode()+b'\0'+p.read_bytes())
     return h.hexdigest()
 
+def response_schema(role,payload):
+    """The transport uses the same protocol the controller validates."""
+    if role=='user_simulator':return decision_schema()
+    if role=='interaction_judge':
+        item={'type':'object','additionalProperties':False,'properties':{
+            'id':{'type':'string','enum':payload['items']},
+            'score':{'type':'integer','enum':[0,1,2]},
+            'evidence_refs':{'type':'array','items':{'type':'string'}},
+            'reason':{'type':'string'}},'required':['id','score','evidence_refs','reason']}
+        return {'type':'object','additionalProperties':False,'properties':{
+            'items':{'type':'array','items':item}},'required':['items']}
+    if role=='requirement_rubric_judge':
+        refs=sorted({item['ref'] for group in ('artifacts','messages','executions') for item in payload['evidence'][group]})
+        if 'clauses' in payload and 'evidence_excerpt_of_revision' not in payload:
+            grounding={'type':'object','additionalProperties':False,'properties':{
+                'kind':{'type':'string','enum':['artifact','execution','agent_message']},
+                'ref':{'type':'string'},'quote':{'type':'string'}},'required':['kind','ref','quote']}
+            clause={'type':'object','additionalProperties':False,'properties':{
+                'id':{'type':'string'},'verdict':{'type':'string','enum':['satisfied','violated','unsupported']},
+                'grounding':{'type':'array','items':grounding},'reason':{'type':'string'}},
+                'required':['id','verdict','grounding','reason']}
+            properties={'packet_id':{'type':'string','const':payload['packet_id']},
+                        'clauses':{'type':'array','items':clause}}
+        else:
+            properties={'packet_id':{'type':'string','const':payload['packet_id']},
+                'status':{'type':'string','enum':['met','not_met','unknown']},
+                'evidence_refs':{'type':'array','items':{'type':'string','enum':refs} if refs else {'type':'string'}},
+                'reason':{'type':'string','minLength':1}}
+        return {'type':'object','additionalProperties':False,'properties':properties,'required':list(properties)}
+    raise ValueError('No output protocol for role: '+role)
+
+
 class Calls:
     def __init__(self,config,out,deadline=None):self.config=config;self.out=out;self.deadline=deadline
     async def __call__(self,role,system,payload):
         name='user_simulator' if role=='user_simulator' else 'judge'
         timeout=3*float(self.config[name].get('timeout_sec',120))+3
         if self.deadline is not None:timeout=min(timeout,max(.1,self.deadline-time.monotonic()))
+        end=time.monotonic()+timeout
+        if self.deadline is not None:end=min(end,self.deadline)
         def invoke():
             api=RoleAPI(self.config,name,self.out/'api')
-            schema={'type':'object'}
-            if role=='requirement_rubric_judge':
-                refs=sorted({item['ref'] for group in ('artifacts','messages','executions') for item in payload['evidence'][group]})
-                schema={'type':'object','additionalProperties':False,'properties':{
-                    'packet_id':{'type':'string','const':payload['packet_id']},
-                    'status':{'type':'string','enum':['met','not_met','unknown']},
-                    'evidence_refs':{'type':'array','items':{'type':'string','enum':refs} if refs else {'type':'string'}},
-                    'reason':{'type':'string','minLength':1}},
-                    'required':['packet_id','status','evidence_refs','reason']}
+            schema=response_schema(role,payload)
             messages=[{'role':'system','content':system+' Return one JSON object only. Never cite a collection name such as executions; cite only item refs.'},
                       {'role':'user','content':json.dumps(payload,ensure_ascii=False)}]
-            end=time.monotonic()+timeout
             try:
-                from jsonschema import ValidationError
-                for attempt in range(3):
-                    try:return api.json(messages,schema,'persona_decision',16000,max(.1,end-time.monotonic()))
-                    except (APIConnectionError,RateLimitError,InternalServerError):
-                        if attempt==2 or time.monotonic()>=end:raise
-                        time.sleep(min(2**attempt,max(0,end-time.monotonic())))
-                    except (ValueError,ValidationError) as exc:
-                        if attempt==2 or time.monotonic()>=end:raise
-                        messages.append({'role':'user','content':'Your previous response was rejected as invalid JSON or invalid schema. Return exactly one JSON object; copy packet_id exactly and use only item refs listed in the schema. Do not add commentary or executable expressions.'})
+                # RoleAPI owns bounded transport/output repair with one deadline.
+                return api.json(messages,schema,'persona_decision',16000,max(.1,end-time.monotonic()))
             finally:api.client.close()
         return await asyncio.wait_for(asyncio.to_thread(invoke),timeout=timeout+1)
 
@@ -212,7 +230,10 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
                 stop='api_interrupted';result.update(api_interrupted=True,api_error_type=type(exc).__name__);break
             write(out/'persona-turns.json',sim.records)
             if decision['action']=='assessment_unavailable':
-                stop='online_judge_unavailable';result['online_judge_unavailable']=True;break
+                stop='simulator_unavailable' if sim.records[-1].get('rejections') else 'online_judge_unavailable'
+                result['online_judge_unavailable']=True
+                result['simulator_unavailable']=stop=='simulator_unavailable'
+                break
             if decision['action']=='accept' and sim.user_accepted:stop='user_accepted';break
             conversation.append({'role':'user','content':decision['content'] if decision['action']=='message' else '[The user is temporarily silent. Continue the authorized task.]'})
         coding_elapsed=seconds-max(0,deadline-time.monotonic())

@@ -79,6 +79,10 @@ def evaluate(args, selected):
         stop_launch.set()
         interrupted.set()
 
+    def drain(signum, _frame):
+        # Keep active task clocks and cleanup intact; transfer only the queue.
+        stop_launch.set()
+
     def execute(index, row):
         out = args.output / f'{index:04d}'
         profile = row['interaction']['profile_id']
@@ -143,6 +147,8 @@ def evaluate(args, selected):
         temporary.replace(path)
 
     previous = {sig: signal.signal(sig, stop) for sig in (signal.SIGINT, signal.SIGTERM)}
+    if hasattr(signal,'SIGUSR1'):
+        previous[signal.SIGUSR1] = signal.signal(signal.SIGUSR1,drain)
     try:
         with ThreadPoolExecutor(max_workers=args.workers) as pool:
             def fill():
@@ -181,6 +187,7 @@ def main():
     p.add_argument('--workers', type=int, default=2, help='Concurrent task workers (default: 2; use 1 for sequential evaluation)')
     p.add_argument('--source-benchmark')
     p.add_argument('--profile')
+    p.add_argument('--task',action='append',help='Evaluate only these task IDs; repeat for multiple tasks')
     p.add_argument('--limit', type=int)
     p.add_argument('--cpu-only', action='store_true', help='Select rows requiring no GPUs')
     p.add_argument('--dry-run', action='store_true')
@@ -199,7 +206,10 @@ def main():
     metadata = pq.read_table(args.dataset, columns=['task_id', 'source_benchmark', 'interaction', 'environment']).to_pylist()
     selected = [r for r in metadata if (not args.source_benchmark or r['source_benchmark'] == args.source_benchmark)
                 and (not args.profile or r['interaction']['profile_id'] == args.profile)
+                and (not args.task or r['task_id'] in args.task)
                 and (not args.cpu_only or not r['environment']['agent']['resources']['gpus'])]
+    if args.task and set(args.task)-{r['task_id'] for r in selected}:
+        p.error('Some --task IDs are missing or excluded by the selection filters')
     if args.limit:
         selected = selected[:args.limit]
     if not selected:

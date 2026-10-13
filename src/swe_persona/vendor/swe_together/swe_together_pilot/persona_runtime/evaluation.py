@@ -273,6 +273,11 @@ async def judge_requirement(call,requirement,evidence,activation,registry,policy
                 'Honor mandatory format and behavior constraints in the fixed rubric; they are not optional. '
                 'Return not_met for a material unmet request or a contradicted claim. '
                 'Return unknown only when missing evidence prevents a meaningful decision. '
+                'Apply the fixed unknown_if clauses and evidence_required literally to material claims. '
+                'For a review conclusion about concrete source behavior, an agent-authored explanation or registered '
+                'binding is not a substitute for the current source or diff. If the rubric requires current source/diff '
+                'to check that conclusion and neither is present, return unknown even when the answer has all requested '
+                'sections. Missing assessor inputs alone do not demonstrate an agent violation. '
                 'An agent statement alone does not prove that a test ran; use host execution records for execution claims. '
                 'A historical execution with matches_current_snapshot false or null does not prove that the final code '
                 'was tested; null means the execution-time code version was not captured. It can still prove that '
@@ -310,7 +315,7 @@ async def judge_requirement(call,requirement,evidence,activation,registry,policy
                 'api_interrupted':answer.get('api_interrupted',False) if isinstance(answer,dict) else False,
                 'reason':reason,'revision':evidence['revision'],'calibrated':False,
                 'source_judge_tier':requirement['rubric']['judge'],'evaluation_policy':policy,
-                'judge_prompt_revision':'overall_completion_v2',
+                'judge_prompt_revision':'overall_completion_v3',
                 'deterministic_status':deterministic.get('status') if checker_configured else None,
                 'deterministic_checker_applicable':checker_configured}
     samples=[]

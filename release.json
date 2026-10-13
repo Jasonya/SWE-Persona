@@ -25,7 +25,7 @@
     "swe-together": 4,
     "deep-swe": 28
   },
-  "runtime_sha256": "bfd850c988c65ee64ed2c2ddabdff829a79e96573610b91f8f3f16f5f4105659",
+  "runtime_sha256": "220caad679955f23f22937231767677099a9bbf22e9787ba0cb811cec246d707",
   "scoring_entrypoint": "scripts/score.py",
   "evaluation_entrypoint": "swe-persona run",
   "batch_entrypoint": "scripts/evaluate.py",
@@ -38,5 +38,14 @@
   "native_stability_entrypoint": "scripts/check_live_native.py",
   "api_output_recovery_policy": "bounded-output-recovery-v1",
   "simulator_output_protocol": "simulator-json-envelope-v1",
-  "agent_output_protocol": "coding-agent-json-envelope-v1"
+  "agent_output_protocol": "coding-agent-json-envelope-v1",
+  "shell_clause_protocol": "literal-clause-truth-v1",
+  "shell_calibration_fixture": "packaged-rubric-control-v1",
+  "structured_output_fallback_policy": "structured-output-fallback-v1",
+  "together_calibration_fixture": "swe-together-calibration-fixtures-v2",
+  "together_simulator_transport": "strict-decision-schema-v1",
+  "shell_native_failure_policy": "reference-execution-control-v1",
+  "live_test_projection": "cwd-independent-official-test-files-v1",
+  "shell_native_reference_controls": "swepro-native-reference-controls-v1",
+  "together_overall_judge_prompt": "overall_completion_v3"
 }

@@ -3,6 +3,7 @@ import hashlib,json,os,shutil,subprocess,sys
 from pathlib import Path
 from .dataset import write
 from .api import chat_token_options
+from .output_mode import configured_mode
 from .schema import safe_path
 PROFILE='deep-swe'
 def read(path):return json.loads(Path(path).read_text())
@@ -49,6 +50,8 @@ def configure_roles(config):
         key=keys[name]
         if not key:raise ValueError('Missing API key variable: '+value['api_key_env'])
         for field,item in {'HTTP_TIMEOUT_SECONDS':str(value.get('timeout_sec',300)),'MODEL':value['model'],'API_PROVIDER':'openai','API_BASE_URL':value['base_url'],'API_KEY':key,'API_MODE':value['api'],'REASONING_EFFORT':options.get('reasoning_effort','inherit'),'MAX_TOKENS_FIELD':value.get('max_tokens_field',value.get('request_options',{}).get('max_tokens_field','max_completion_tokens')),'REQUEST_OPTIONS_JSON':json.dumps({k:v for k,v in options.items() if k not in ('reasoning_effort','max_tokens_field')}),'STRUCTURED_OUTPUT_MODE':value.get('structured_output_mode','json_schema' if value.get('strict_json_schema',True) else 'json_object')}.items():os.environ[prefix+'_'+field]=item
+        configured_mode(value)
+        os.environ[prefix+'_STRUCTURED_OUTPUT_FALLBACK']=json.dumps(value.get('structured_output_fallback',True))
 
 def prepare_image(row,root,out):
     image=row['environment']['agent']['image']
@@ -84,6 +87,10 @@ def execute(root,row,config,out,mode,gate=None):
         from dspilot.harbor_runtime import metadata
         print(json.dumps({'status':'pass','task_id':row['task_id'],'runtime':metadata(),'requirements':len(actual),'gold_required':False}));return 0
     configure_roles(config)
+    # Keep host-owned session metadata available to the outer worker after a
+    # watchdog interruption. Never use agent artifacts to authorize cleanup.
+    sessions=out/'environments';sessions.mkdir(parents=True,exist_ok=True)
+    os.environ['DS_HARBOR_WORK_ROOT']=str(sessions.resolve())
     from dspilot import delivery_runtime as rt
     if mode=='calibrate':
         from dspilot.delivery_calibration import run

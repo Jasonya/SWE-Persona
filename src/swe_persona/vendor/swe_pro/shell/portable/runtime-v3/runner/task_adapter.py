@@ -445,7 +445,13 @@ class TaskManifest:
         fixtures: Path,
         *,
         harness_cache: Path = DEFAULT_HARNESS_CACHE,
+        official_assets: Optional[Dict[str, str]] = None,
     ) -> Path:
+        if official_assets is not None:
+            if set(official_assets) != {"run_script.sh", "parser.py"} or not all(
+                isinstance(text, str) and text.strip() for text in official_assets.values()
+            ):
+                raise ValueError("Packaged official assets must contain the runner and parser text")
         destination.mkdir(parents=True, exist_ok=True)
         (destination / "test.patch").write_text(str(self.row["test_patch"]), encoding="utf-8")
         (destination / "gold.patch").write_text(str(self.row["patch"]), encoding="utf-8")
@@ -466,8 +472,11 @@ class TaskManifest:
         }
         (destination / "task_spec.json").write_text(json.dumps(spec, indent=2), encoding="utf-8")
         for name in ("run_script.sh", "parser.py"):
-            source = _official_asset(self.task_id, name, harness_cache)
-            shutil.copy2(source, destination / name)
+            if official_assets is None:
+                source = _official_asset(self.task_id, name, harness_cache)
+                shutil.copy2(source, destination / name)
+            else:
+                (destination / name).write_text(official_assets[name], encoding="utf-8")
         shutil.copy2(fixtures / "checker_driver.py", destination / "checker_driver.py")
         asset_hashes = {
             name: hashlib.sha256((destination / name).read_bytes()).hexdigest()

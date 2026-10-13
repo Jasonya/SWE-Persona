@@ -15,6 +15,7 @@ from .api_codec import chat_payload, chat_response
 from .coding_budget import bounded_timeout
 from swe_persona.api_recovery import APITransportExhausted, append_audit, retry_transport
 from swe_persona.api_output import POLICY as OUTPUT_POLICY, OutputBudget, configured_limit
+from swe_persona.output_mode import POLICY as FORMAT_POLICY, OutputModeFallback, mode_messages
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -68,11 +69,14 @@ class Client:
             role=role, schema=schema, max_output_tokens=max_output_tokens, effort=effort)
         max_output_tokens = budget.current
         mode = route['API_MODE']
+        format_state=OutputModeFallback(route['API_BASE_URL'],model,mode,
+            route['STRUCTURED_OUTPUT_MODE'],route['STRUCTURED_OUTPUT_FALLBACK']=='true')
+        output_mode=format_state.mode
         if mode == 'chat_completions':
             payload = chat_payload(messages, model=model, max_output_tokens=max_output_tokens,
                 token_field=route['MAX_TOKENS_FIELD'], effort=effective_effort,
                 tools=tools, schema=schema, tool_choice=tool_choice,
-                structured_output_mode=route['STRUCTURED_OUTPUT_MODE'])
+                structured_output_mode=output_mode)
             suffix = '/chat/completions'
         elif mode == 'responses':
             payload = {'model': model, 'input': messages, 'store': False, 'max_output_tokens': max_output_tokens}
@@ -83,11 +87,11 @@ class Client:
                 payload['include'] = ['reasoning.encrypted_content']
                 if tool_choice: payload['tool_choice'] = tool_choice
             if schema is not None:
-                if route['STRUCTURED_OUTPUT_MODE'] in ('json_object','prompt'):
+                if output_mode in ('json_object','prompt'):
                     if not isinstance(messages, list): raise ValueError('JSON mode requires message list')
                     payload['input'] = [{'role': 'system', 'content':
                         'Return only one JSON object conforming to this JSON Schema: ' + json.dumps(schema)}] + messages
-                    if route['STRUCTURED_OUTPUT_MODE'] == 'json_object':
+                    if output_mode == 'json_object':
                         payload['text'] = {'format': {'type': 'json_object'}}
                 else:
                     payload['text'] = {'format': {'type': 'json_schema', 'name': 'result', 'strict': True, 'schema': schema}}
@@ -156,6 +160,21 @@ class Client:
                     self._output_ceiling[role] = budget.ceiling
                     audit({'policy':OUTPUT_POLICY,'status':'token_ceiling','from':old_limit,'to':budget.current})
                     continue
+                next_mode=format_state.reject(output_mode,exc.code,message) if schema is not None else None
+                if next_mode is not None:
+                    audit({'policy':FORMAT_POLICY,'status':'mode_fallback','from':output_mode,'to':next_mode,
+                           'http_status':exc.code,'reason':'provider_rejected_output_mode','action_executed':False})
+                    output_mode=next_mode
+                    if mode=='chat_completions':
+                        payload=chat_payload(messages,model=model,max_output_tokens=budget.current,
+                            token_field=token_field,effort=effective_effort,tools=tools,schema=schema,
+                            tool_choice=tool_choice,structured_output_mode=output_mode)
+                        payload.update(options);payload.update(extra)
+                    else:
+                        payload.pop('text',None)
+                        payload['input']=mode_messages(messages,schema,output_mode)
+                        if output_mode=='json_object':payload['text']={'format':{'type':'json_object'}}
+                    continue
                 return retry_or_fail(f'HTTP {exc.code}; code={code}; {message}',False)
             except Exception as exc:
                 return retry_or_fail(f'API transport failed: {type(exc).__name__}; details withheld',False)
@@ -171,7 +190,7 @@ class Client:
             self.usage['output_tokens'] += usage.get('output_tokens', 0)
             self.usage['cached_tokens'] += (usage.get('input_tokens_details') or {}).get('cached_tokens', 0)
             record = {'call': self.calls, 'role': role, 'model': model, 'effort': effective_effort,
-                      'api_route': metadata, 'requested_max_tokens':budget.current,
+                      'api_route': metadata, 'structured_output_mode':output_mode, 'requested_max_tokens':budget.current,
                       'seconds': round(time.monotonic()-started, 3), 'usage': usage,
                       'status': result.get('status'), 'incomplete_details': result.get('incomplete_details')}
             if self.log:
