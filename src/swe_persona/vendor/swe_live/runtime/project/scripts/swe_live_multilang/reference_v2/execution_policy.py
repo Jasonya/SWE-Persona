@@ -24,30 +24,34 @@ class Deadline:
 
 
 class BudgetClient:
-    """At most two transport attempts; never multiply JSON repairs by retries.
+    """The routed API owns three transport attempts within the phase deadline.
 
     Per-request SDK options use a shallow client copy, so three independent
     samples cannot race on a shared transport timeout setting.
     """
-    def __init__(self, client, request_seconds=90, attempts=2):
+    def __init__(self, client, request_seconds=90, attempts=3):
         self.client, self.model = client, client.model
         self.request_seconds, self.attempts = request_seconds, attempts
         self.deadline = Deadline(900, "checker_calibration")
 
     def _invoke(self, method, args, kwargs):
         from llm import SchemaRepairFailed
+        from swe_persona.api_recovery import is_api_interruption
         last = None
-        for attempt in range(1, self.attempts + 1):
+        routed = hasattr(self.client,'_api')
+        attempts = 1 if routed else self.attempts
+        for attempt in range(1, attempts + 1):
             remaining = self.deadline.remaining()
-            timeout = min(self.request_seconds, remaining)
+            timeout = min(3*self.request_seconds+3 if routed else self.request_seconds, remaining)
             bound = copy.copy(self.client)
+            bound._request_timeout=min(self.request_seconds,remaining)
             bound._client = self.client._client.with_options(timeout=timeout, max_retries=0)
             options = dict(kwargs, attempts=1)
             if method == "json_obj":
                 options["repairs"] = 0
             role = kwargs.get("role", "model")
             started = time.monotonic()
-            print(f"[api] {role}; attempt={attempt}/{self.attempts}; timeout={timeout:.1f}s", flush=True)
+            print(f"[api] {role}; attempt={attempt}/{attempts}; timeout={timeout:.1f}s", flush=True)
             try:
                 result = getattr(bound, method)(*args, **options)
                 self.deadline.remaining()  # a late response cannot extend a phase
@@ -58,9 +62,10 @@ class BudgetClient:
             except Exception as exc:
                 last = exc
                 print(f"[api] {role}; {type(exc).__name__} after {time.monotonic() - started:.1f}s", flush=True)
-                if attempt < self.attempts:
-                    time.sleep(min(1, self.deadline.remaining()))
-        raise RuntimeError(f"{self.model} transport failed after {self.attempts} attempts ({type(last).__name__})") from last
+                if routed or not is_api_interruption(exc):raise
+                if attempt < attempts:
+                    time.sleep(min(attempt, self.deadline.remaining()))
+        raise RuntimeError(f"{self.model} transport failed after {attempts} attempts ({type(last).__name__})") from last
 
     def text(self, *args, **kwargs):
         return self._invoke("text", args, kwargs)

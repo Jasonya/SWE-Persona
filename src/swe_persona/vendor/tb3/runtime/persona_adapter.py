@@ -5,6 +5,7 @@ sys.path.insert(0, str(PERSONA_REPO))
 from src.personas import Persona, UserSimulator
 from src.personas.salience import compile_interaction_contract, activate_persona_preferences
 from azure_client import call, obj, TEXT
+from swe_persona.simulator_output import response_envelope, prepend_envelope
 
 class EvaluationPersona(Persona):
     def to_system_prompt(self, **kwargs):
@@ -27,6 +28,15 @@ DECISION = obj({
     'reason': TEXT,
 })
 
+OUTPUT_FIELDS = {
+    'action':'Choose only from current allowed_actions. Use done only when the controller allows completion.',
+    'message_type':'Use no-op (no user message), question (ask), redirect (change approach), new_requirement (disclose a due requirement), approval (approve a concrete command or plan), or clarification (answer or clarify). Command approval uses message_type=approval and approve_command=true.',
+    'message':'Put all user text addressed to the coding agent here. Use "" only when the current action permits no user message. Do not omit message_type.',
+    'fact_ids':'Use only current allowed_fact_ids. Use [] when none are selected. Follow require_all_facts when true.',
+    'approve_command':'Always include a JSON boolean. Approve only the exact concrete command currently proposed, within the current scope; otherwise use false.',
+    'approve_plan':'Always include a JSON boolean. Approve only a concrete visible approach within current scope; otherwise use false.',
+    'reason':'A brief private explanation for the controller audit; this text is not addressed to the coding agent.'}
+
 class ReactiveUser:
     def __init__(self, binding, audit_dir, timeout=600, closed_loop=False):
         self.binding = binding; self.audit_dir = audit_dir; self.timeout = timeout
@@ -44,15 +54,33 @@ class ReactiveUser:
             self.simulator._history.append({'role': 'assistant', 'content': binding['opening_message']})
 
     def complete(self, **kwargs):
-        prompt = '\n\n'.join(m['role'].upper() + ':\n' + m['content'] for m in kwargs['messages'])
+        messages = [dict(m) for m in kwargs['messages']]
+        allowed=self.decision_schema['properties']['action']['enum']
+        action=next((a for a in ('message','continue','abandon','done') if a in allowed),None)
+        if action is None:raise ValueError('No allowed simulator action')
+        observation=self.output_observation
+        example={'action':action,'message_type':'clarification' if action=='message' else 'no-op',
+            'message':'Please address the current request.' if action=='message' else '',
+            'fact_ids':list(observation['allowed_fact_ids']) if observation.get('require_all_facts') else [],
+            'approve_command':False,'approve_plan':False,
+            'reason':'Format example; decide from the current observation.'}
+        envelope=response_envelope(self.decision_schema,example,OUTPUT_FIELDS)
+        for message in messages:
+            if message['role'] == 'system':
+                message['content'] = prepend_envelope(message['content'],envelope)
+                break
+        else:
+            messages.insert(0, {'role': 'system', 'content': envelope})
+        prompt = '\n\n'.join(m['role'].upper() + ':\n' + m['content'] for m in messages)
         self.decision = call('simulator', prompt, self.decision_schema, self.audit_dir, self.timeout,
-                             messages=kwargs['messages'])
+                             messages=messages)
         return self.decision['message']
 
     def step(self, observation):
         # Enforce the current controller state in the response schema so bounded
         # format repair can reject impossible actions before advancing dialogue.
         self.decision_schema = copy.deepcopy(DECISION)
+        self.output_observation = copy.deepcopy(observation)
         properties = self.decision_schema['properties']
         properties['action']['enum'] = list(observation['allowed_actions'])
         if observation['allowed_fact_ids']:

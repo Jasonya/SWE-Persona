@@ -135,7 +135,10 @@ def materialize(row, destination):
             row_index_one=row['source']['row_index']+1,instance_id=row['source']['instance_id'],
             repository=row['source']['repository'],base_commit=row['environment']['expected_base_commit'],
             public_contract=native,public_contract_sha256=hashlib.sha256(json.dumps(native,sort_keys=True,ensure_ascii=False).encode()).hexdigest(),
-            persona_version={'schema_version':pool['schema_version'],'sha256':pool_hash},status='ready',requirements=specs)
+            persona_version={'schema_version':pool['schema_version'],'sha256':pool_hash},status='ready',requirements=specs,
+            applicability={'verdict':'applicable',
+                'reason':'This immutable task/persona pair includes frozen, bound persona requirements.',
+                'source':'swe-persona-parquet','source_content_sha256':row['content_sha256']})
         case_path=f'cases/{case_id}'
         write(portable/case_path/'binding.json',binding)
         write(portable/case_path/'opening.json',dict(extra['opening'],vague_request=row['initial_message']))

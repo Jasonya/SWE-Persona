@@ -237,6 +237,9 @@ class Llm:
                     raise RuntimeError("empty output")
                 return out, None
             except Exception as exc:  # noqa: BLE001 - transport/rate errors are retried
+                from swe_persona.api_recovery import is_api_interruption
+                if is_api_interruption(exc):
+                    raise
                 last_err = exc
                 self.log.add({"ts": _now(), "role": role, "model": self.model, "attempt": attempt,
                               "latency_sec": round(time.time() - started, 2),

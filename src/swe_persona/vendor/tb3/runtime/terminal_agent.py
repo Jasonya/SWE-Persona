@@ -6,10 +6,20 @@ from azure_client import call, obj, TEXT
 from protocol import due_requirement, visible_transcript, MAX_USER_TURNS, write
 from persona_adapter import ReactiveUser
 from src.personas.salience import activate_persona_preferences
-from requirement_loop import RequirementLoop, load_bundle, assess, visible_ledger, POLICY
+from requirement_loop import RequirementLoop, load_bundle, assess, visible_ledger, POLICY, AssessmentUnavailable
+from swe_persona.api_recovery import is_api_interruption
+from swe_persona.agent_output import action_envelope
 
 ACTION=obj({'action':{'type':'string','enum':['shell','reply','ready','view_image','status']},'command':TEXT,'message':TEXT,'image_path':TEXT})
 USER=obj({'message':TEXT})
+
+AGENT_ENVELOPE=action_envelope(ACTION,[
+    {'action':'shell','command':'pwd','message':'','image_path':''},
+    {'action':'reply','command':'','message':'Could you clarify the current request?','image_path':''}], {
+    'action':'Choose shell, view_image, reply, status or ready. shell runs command. view_image reads image_path. reply asks a question or proposes a concrete command for approval without executing it. status reports progress. ready submits completed work for user review; it does not declare benchmark success.',
+    'command':'Always a JSON string. For shell, put one command batch here. For reply, put the exact proposed command here only when asking for its approval. Otherwise use "". Proposing a command does not run it.',
+    'message':'Always a JSON string. Put the complete user-facing question, plan, progress report or handoff here. The user sees this text and high-level tool activity, not raw command output. Explain requested evidence here; use "" when no message applies.',
+    'image_path':'Always a JSON string. For view_image, use the actual path supplied or discovered in this task; set command to "". For all other actions, use "".'})
 
 class InteractionDeadline(Exception):
     """The complete interaction, including simulator waits, reached its limit."""
@@ -39,7 +49,7 @@ async def docker(*args):
 class PersonaTerminalAgent(BaseAgent):
     @staticmethod
     def name():return 'persona-terminal-astra'
-    def version(self):return 'tb3-v6-requirement-loop-v1'
+    def version(self):return 'tb3-v6-requirement-loop-v2'
     def __init__(self,*args,arm='single_turn',limit_seconds=7200,binding_path=None,gpu_device=None,**kwargs):
         super().__init__(*args,**kwargs)
         self.private_dir=self.logs_dir.with_name(self.logs_dir.name+'-private')
@@ -159,16 +169,18 @@ class PersonaTerminalAgent(BaseAgent):
     async def review_requirements(self, event):
         loop = self.requirement_loop
         if not loop or event not in {'validation_report', 'completion_attempt', 'work_checkpoint'}:
-            return
+            return True
         # Final submissions recheck all already disclosed requirements for regressions.
         rids = ([rid for rid, state in loop.states.items() if state['state'] != 'undisclosed']
-                if event == 'completion_attempt' else ([loop.current()] if loop.current() else []))
+                if event == 'completion_attempt' else ([loop.review_target()] if loop.review_target() else []))
         for rid in rids:
             state = loop.states[rid]
             if event != 'completion_attempt':
                 fresh = [e for e in visible_ledger(self.events) if e['role'] == 'agent'
                          and e['event_index'] > max(state['disclosed_at'], state['reviewed_through'])]
                 if not fresh:
+                    if state['assessment_unavailable']:
+                        return False
                     continue
             self.user_wait=True; start=time.monotonic()
             try:
@@ -177,6 +189,12 @@ class PersonaTerminalAgent(BaseAgent):
                     min(600, self.remaining()), completion=event == 'completion_attempt'))
                 loop.record(rid, result, visible_ledger(self.events))
                 self.event('requirement_review', result)
+            except AssessmentUnavailable as exc:
+                loop.record_unavailable(rid, exc, visible_ledger(self.events))
+                self.event('requirement_assessment_unavailable', {'requirement_id': rid,
+                    'completion_attempt': event == 'completion_attempt', 'agent_correction_requested': False,
+                    'last_valid_verdict': state['review']['verdict'] if state['review'] else None})
+                return False
             except InteractionDeadline:
                 raise
             except Exception as exc:
@@ -186,6 +204,7 @@ class PersonaTerminalAgent(BaseAgent):
                 self.user_wait=False
             if result['verdict'] != 'MET':
                 break
+        return True
 
     async def user_response(self,messages,event='clarification',action=None):
         turn_limit = POLICY['max_user_turns'] if self.requirement_loop else MAX_USER_TURNS
@@ -196,7 +215,13 @@ class PersonaTerminalAgent(BaseAgent):
         if self.expired or self.remaining()<=0:raise InteractionDeadline()
         turn=self.user_turns+1
         requirements=self.binding['proposal']['requirements']
-        await self.review_requirements(event)
+        if not await self.review_requirements(event):
+            if event == 'completion_attempt':
+                self.terminal='online_judge_unavailable'
+                return False
+            self.actions_since_user=0;self.visible_activity=[]
+            if not self.expired:await self.resume_containers()
+            return True
         due=(self.requirement_loop.due(turn,event) if self.requirement_loop
              else due_requirement(requirements,self.disclosed_ids,turn,event))
         if due:await self.checkpoint('before-'+due['id'])
@@ -300,7 +325,7 @@ class PersonaTerminalAgent(BaseAgent):
         else:initial=instruction
         messages=[{'role':'user','content':initial}];self.event('initial_instruction',messages[0])
         watchdog=asyncio.create_task(self.watch());images=[]
-        system='''You are the evaluated terminal coding agent. Work in the provided task container and respond in strict action JSON. shell runs command; view_image reads image_path; reply asks the user a question or proposes an exact command in command; status sends a meaningful progress/validation report; ready submits your completed work to the user. The user sees your message and high-level tool activity, not raw command output. Explain requested evidence in message. Use reply to clarify underspecified requirements and approval preferences. Do not read hidden tests/reference solutions or manipulate verifier infrastructure. Public documentation is allowed. Hidden original tests run after the interaction without repair feedback. All agent requests, tools and user waits consume the same wall-clock budget. Deadline exhaustion makes the whole task fail. Preserve every original requirement as the user clarifies or adds scope. Ask relevant questions, act on user feedback, and report progress at meaningful checkpoints. Do not guess withheld paths or acceptance details. Group related operations into coherent command batches when the user requires confirmation.'''
+        system=AGENT_ENVELOPE+'''You are the evaluated terminal coding agent. Work in the provided task container and respond in strict action JSON. shell runs command; view_image reads image_path; reply asks the user a question or proposes an exact command in command; status sends a meaningful progress/validation report; ready submits your completed work to the user. The user sees your message and high-level tool activity, not raw command output. Explain requested evidence in message. Use reply to clarify underspecified requirements and approval preferences. Do not read hidden tests/reference solutions or manipulate verifier infrastructure. Public documentation is allowed. Hidden original tests run after the interaction without repair feedback. All agent requests, tools and user waits consume the same wall-clock budget. Deadline exhaustion makes the whole task fail. Preserve every original requirement as the user clarifies or adds scope. Ask relevant questions, act on user feedback, and report progress at meaningful checkpoints. Do not guess withheld paths or acceptance details. Group related operations into coherent command batches when the user requires confirmation.'''
         try:
             for index in range(2048):
                 if self.expired or self.remaining()<=0:raise InteractionDeadline()
@@ -308,7 +333,8 @@ class PersonaTerminalAgent(BaseAgent):
                 try:action=await self.within_budget(asyncio.to_thread(call,'agent',prompt,ACTION,self.private_dir/'audit',min(600,self.remaining()),images))
                 except InteractionDeadline:raise
                 except Exception as exc:
-                    self.terminal='provider_or_protocol_error';self.event('agent_error',{'type':type(exc).__name__,'message':str(exc)});break
+                    self.terminal='api_interrupted' if is_api_interruption(exc) else 'provider_or_protocol_error'
+                    self.event('agent_error',{'type':type(exc).__name__,'message':str(exc),'api_interrupted':is_api_interruption(exc)});break
                 images=[]
                 if self.expired or self.remaining()<=0:raise InteractionDeadline()
                 self.event('agent_action',action);messages.append({'role':'assistant','content':json.dumps(action,ensure_ascii=False)})
@@ -355,10 +381,11 @@ class PersonaTerminalAgent(BaseAgent):
         except InteractionDeadline:
             self.expired=True;self.terminal='budget_exhausted';await self.pause(deadline=True)
         except RequirementJudgeError as exc:
-            self.terminal='requirement_judge_error'
+            self.terminal='api_interrupted' if is_api_interruption(exc) else 'requirement_judge_error'
             self.event('requirement_judge_error',{'type':type(exc).__name__,'message':str(exc)})
         except Exception as exc:
-            self.terminal='controller_error';self.event('controller_error',{'type':type(exc).__name__,'message':str(exc)})
+            self.terminal='api_interrupted' if is_api_interruption(exc) else 'controller_error'
+            self.event('controller_error',{'type':type(exc).__name__,'message':str(exc),'api_interrupted':is_api_interruption(exc)})
         finally:
             if not self.paused:await self.pause(deadline=self.expired)
             if self.remaining()<=0:

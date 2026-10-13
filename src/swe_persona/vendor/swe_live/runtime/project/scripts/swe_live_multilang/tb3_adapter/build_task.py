@@ -8,7 +8,8 @@ from pathlib import Path
 import shutil
 from registry import load_persona
 from support import read, file_hash, REVISION
-from protocol import PROTOCOL, requirement, digest, JUDGE_PROMPT, SIM_PROMPT, UX_PROMPT, JUDGE_SCHEMA, SIM_SCHEMA
+from protocol import (PROTOCOL, requirement, digest, JUDGE_PROMPT, SIM_PROMPT, UX_PROMPT, JUDGE_SCHEMA, SIM_SCHEMA,
+    JUDGE_POLICY, CALIBRATION_POLICY)
 
 BLUR = 'I need help fixing a problem in this repository. Please start by asking what you need to know.'
 
@@ -101,7 +102,8 @@ def build(source, persona_id, destination, cap):
         'criteria':[{'criterion_id':'R1.contract','text':req['disclosure']}], 'binding_sha256':file_hash(p/'binding.json')})
     save(closed/'policy.json', {'advance_only_on':'MET','partial_unmet':'request correction','unobservable':'request visible evidence',
         'final_recheck':True,'max_user_turns':24,'max_simulator_decisions':64,'whole_sample_seconds':cap,
-        'api_schema_evidence_error':'infrastructure/protocol error; never UNMET',
+        'judge_policy':JUDGE_POLICY,'calibration_policy':CALIBRATION_POLICY,
+        'api_schema_evidence_error':'bounded recovery; unknown model assessment; independent literal checker fallback',
         'original_resources_preserved':True,'global_deadline':None,'timing_policy':'online censored P20; not exact global rank'})
     text(closed/'judge_prompt.md', JUDGE_PROMPT); text(closed/'simulator_prompt.md', SIM_PROMPT)
     save(closed/'response_schema.json', JUDGE_SCHEMA)
@@ -112,7 +114,8 @@ def build(source, persona_id, destination, cap):
     save(closed/'experience_schema.json', {'type':'object','properties':{'satisfaction':{'type':'integer','minimum':1,'maximum':5}},
         'required':['satisfaction'],'additionalProperties':False})
     text(closed/'README.md', '# Host-only requirement loop\n\nLoad the frozen binding, rubric, schemas and prompts. '
-        'Judge only qualified visible messages after disclosure. Validate event/criterion identity and verbatim quotes. '
+        'Judge only qualified visible messages after disclosure. Validate registered evidence IDs and criterion identity. '
+        'Unavailable model assessments remain unknown; the independent checker may resolve this complete literal contract. '
         'MET permits progression; final recheck and independent original/checker verdicts remain mandatory. '
         'This adapter binds one bounded handoff-format requirement, not the persona\'s entire technical scenario.\n')
     save(closed/'manifest.json', {'protocol':PROTOCOL,'binding_sha256':file_hash(p/'binding.json'),

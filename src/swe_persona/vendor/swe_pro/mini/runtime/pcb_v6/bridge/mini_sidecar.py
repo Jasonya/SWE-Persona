@@ -14,6 +14,7 @@ from minisweagent.agents.default import DefaultAgent
 from minisweagent.environments.docker import DockerEnvironment, DockerEnvironmentConfig
 from minisweagent.exceptions import FormatError, InterruptAgentFlow
 from minisweagent.models.litellm_textbased_model import LitellmTextbasedModel
+from swe_persona.api_recovery import APITransportExhausted, append_audit, retry_transport
 
 
 class AttachedDockerEnvironment(DockerEnvironment):
@@ -81,7 +82,14 @@ def save_trajectory(agent, trajectory):
 
 class RecipientTextModel(LitellmTextbasedModel):
     # Retrying a rejected request with identical input cannot repair it.
-    abort_exceptions = LitellmTextbasedModel.abort_exceptions + [litellm.BadRequestError]
+    abort_exceptions = LitellmTextbasedModel.abort_exceptions + [litellm.BadRequestError, APITransportExhausted]
+
+    def _query(self, messages, **kwargs):
+        def request(seconds):
+            return super(RecipientTextModel, self)._query(messages, **dict(kwargs,timeout=seconds,num_retries=0))
+        return retry_transport(request,request_timeout=float(os.environ.get('SWE_PERSONA_AGENT_HTTP_TIMEOUT',300)),
+            deadline=self.recovery_deadline,
+            audit=lambda record:append_audit(self.recovery_audit,dict(record,role='agent')))
 
 
 def make_model(request, config):
@@ -126,6 +134,8 @@ def main():
     model = make_model(request, config)
     env = AttachedDockerEnvironment(request["container"],
                                     time.monotonic() + request["timeout"], request["pid_file"])
+    model.recovery_deadline = env.deadline
+    model.recovery_audit = directory / 'transport-recovery.jsonl'
     agent = DefaultAgent(model, env, system_template=system,
                          instance_template=instance, cost_limit=0,
                          step_limit=0, output_path=None)
@@ -152,6 +162,12 @@ def main():
                 raise RuntimeError("mini-swe-agent repeated format errors")
         except InterruptAgentFlow as exc:
             agent.add_messages(*exc.messages)
+        except APITransportExhausted as exc:
+            # Preserve the workspace/trajectory; the episode will freeze and grade it.
+            (directory / ("turn-%s.json" % request["turn"])).write_text(json.dumps({
+                'reply':'', 'status':'api_interrupted', 'executions':env.executions,
+                'api_error':str(exc), 'mini_version':minisweagent.__version__}))
+            return
         finally:
             save_trajectory(agent, trajectory)
         if agent.messages[-1].get("role") == "exit":

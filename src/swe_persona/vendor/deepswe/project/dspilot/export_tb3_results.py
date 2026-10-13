@@ -88,6 +88,9 @@ def benchmark_assessment(result, official=None):
              'independent_objective_persona_acceptance': False}
     def finish(status, reason):
         return {**value, 'status': status, 'reason': reason}
+    recovery=result.get('api_recovery_assessment')
+    if recovery is not None:
+        return finish(recovery['status'],recovery['reason'])
     if legacy == 'infrastructure_error':
         return finish(legacy, legacy_reason)
     if (result.get('evaluation_valid') is not True

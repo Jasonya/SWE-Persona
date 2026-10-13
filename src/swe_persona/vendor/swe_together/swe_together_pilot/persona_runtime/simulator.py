@@ -9,6 +9,30 @@ import asyncio
 import os
 from .binding import validate, digest
 from .evaluation import CheckerRegistry, judge_requirement, audit_interaction, persona_status, seal_evidence
+from swe_persona.simulator_output import response_envelope
+
+
+def decision_envelope(due, *, acceptance_ready=False):
+    fields={
+        'action':'Choose message, no-op or accept. A no-op is temporary silence, never task acceptance.',
+        'kind':'Use persona only for the one currently due requirement, base for ordinary user messages, and wait for no-op or accept.',
+        'content':'The coding agent receives this user message. With a due requirement, include its exact statement. Use "" for no-op and accept.',
+        'requirement_id':'Use the current due ID only with kind=persona; otherwise use JSON null.',
+        'base_task_complete':'Include this field only with accept, with value true. Base task completion must be independently supported by the current context.',
+        'completion_reason':'Include this nonempty private explanation only with accept; explain why the original task and its substantive follow-ups are complete.'}
+    properties={'action':{'type':'string','enum':['message','no-op','accept']},
+        'kind':{'type':'string','enum':['base','persona','wait']},'content':{'type':'string'},
+        'requirement_id':{'type':['string','null']},'base_task_complete':{'type':'boolean'},
+        'completion_reason':{'type':'string'}}
+    schema={'type':'object','properties':properties,
+        'required':['action','kind','content','requirement_id'],'additionalProperties':False}
+    example=({'action':'message','kind':'persona','content':due['statement'],'requirement_id':due['id']}
+             if due else {'action':'no-op','kind':'wait','content':'','requirement_id':None})
+    additional=({'action':'accept','kind':'wait','content':'','requirement_id':None,
+                 'base_task_complete':True,'completion_reason':'Format example; assess original-task completion from the current context.'},) if acceptance_ready and not due else ()
+    return response_envelope(schema,example,fields,additional_examples=additional,
+        notes=('Normal turns have exactly action, kind, content and requirement_id. Only accept adds both base_task_complete and completion_reason.',
+               'A format example does not declare acceptance ready. Follow all current completion and disclosure gates.'))
 
 
 def initial_persona_message(persona):
@@ -30,6 +54,8 @@ class UserSimulator:
         self.registry=registry or CheckerRegistry()
         self.history=[];self.disclosed={};self.verdicts={};self.records=[]
         self.last_turn=0;self.revision=None;self.events_seen=set();self.invalid=[]
+        self.judge_errors=[]
+        self.last_valid_verdicts={}
         self._gate_met_evidence_revision=None
         self.stage_index=0
         self.user_accepted=False
@@ -43,6 +69,34 @@ class UserSimulator:
         return {'original_instruction':self.binding['original_instruction'],
                 'original_user_context':self.binding['original_user_context'],
                 'initial_pool_persona':initial}
+
+    async def _review_requirement(self,req,evidence,phase):
+        rejection=None
+        for attempt in range(2):
+            async def call(role,system,payload):
+                if rejection:
+                    system+='\nThe previous assessment was rejected by the controller. Return a complete replacement against the SAME evidence and rubric; cite only registered refs. Do not change the verdict merely to bypass validation. Error: '+rejection
+                return await self.call(role,system,payload)
+            try:
+                verdict=await judge_requirement(call,req,evidence,self.disclosed[req['id']],
+                    self.registry,self.binding['evaluation_policy'],self.task_context())
+            except Exception as exc:
+                from swe_persona.api_recovery import is_api_interruption
+                verdict={'requirement_id':req['id'],'status':'unknown','evidence_refs':[],
+                         'reason':'requirement_assessment_unavailable',
+                         'revision':evidence['revision'],'api_interrupted':is_api_interruption(exc),
+                         'judge_error':{'error_type':type(exc).__name__,'error':str(exc)[:2000]}}
+            if not verdict.get('judge_error'):
+                self.last_valid_verdicts[req['id']]=copy.deepcopy(verdict)
+                return verdict
+            self.judge_errors.append({'requirement_id':req['id'],'turn':self.last_turn,
+                'phase':phase,'attempt':attempt+1,'revision':evidence['revision'],**verdict['judge_error']})
+            if (verdict.get('api_interrupted') or verdict['judge_error']['error_type'] not in
+                    {'InvalidJudgeResponse','ValueError','ValidationError','JSONDecodeError'}):
+                break
+            rejection=verdict['judge_error']['error']
+        verdict['last_valid_verdict']=copy.deepcopy(self.last_valid_verdicts.get(req['id']))
+        return verdict
 
     def _with_history(self,evidence):
         # Live collectors and saved-review callers may supply only the latest
@@ -89,6 +143,10 @@ class UserSimulator:
                 continue
             verdict=self.verdicts.get(req['id'],{})
             if verdict.get('status')=='met':
+                continue
+            if verdict.get('judge_error'):
+                # Internal failures are handled before user feedback. They do
+                # not create another evidence request for the coding agent.
                 continue
             # Translate unresolved rubric clauses into user-facing follow-up.
             # This keeps the evaluator rubric out of the agent's initial
@@ -159,13 +217,17 @@ class UserSimulator:
         requirements=self.binding['persona']['bound_evolved_requirements']
         for req in requirements:
             if req['id'] in self.disclosed:
-                try:
-                    self.verdicts[req['id']]=await judge_requirement(self.call,req,evidence,self.disclosed[req['id']],self.registry,self.binding['evaluation_policy'],self.task_context())
-                except Exception as exc:
-                    self.verdicts[req['id']]={'requirement_id':req['id'],'status':'unknown',
-                        'reason':'judge_error:'+type(exc).__name__,'evidence_refs':[]}
-                    self.invalid.append('requirement_judge_error:'+req['id'])
+                self.verdicts[req['id']]=await self._review_requirement(req,evidence,'interaction')
         self._update_stage()
+        assessment_unavailable=[rid for rid,verdict in self.verdicts.items() if verdict.get('judge_error')]
+        if completion_attempt and assessment_unavailable:
+            decision={'action':'assessment_unavailable','kind':'wait','content':'','requirement_id':None}
+            self.user_accepted=False
+            self.records.append({'turn':turn,'decision':decision,'disclosed':dict(self.disclosed),
+                'verdicts':copy.deepcopy(self.verdicts),'judge_errors':copy.deepcopy(self.judge_errors),
+                'last_valid_verdicts':copy.deepcopy(self.last_valid_verdicts),
+                'agent_correction_requested':False,'revision':evidence['revision']})
+            return decision
         stage=requirements[self.stage_index] if self.stage_index<len(requirements) else None
         due=(stage if stage and stage['id'] not in self.disclosed
              and turn>=stage['earliest_turn']
@@ -181,6 +243,7 @@ When the agent asks a concrete clarification about scope, sequencing, or permiss
 When due is null, never return kind=persona or an already disclosed requirement. A normal intervention is {action:"message",kind:"base",content:nonempty string,requirement_id:null}. Silence is {action:"no-op",kind:"wait",content:"",requirement_id:null}. A no-op ALWAYS means temporary silence, never task acceptance. An interaction_checkpoint is an incremental pause for feedback, not a claim that the whole task is complete.
 Before choosing acceptance, assess the original instruction, substantive follow-up goals in original_user_context, all current user requests and authorizations, the agent's actual work and remaining proposed actions, and the persona delivery. Review findings alone do not complete a workflow that calls for the user to authorize implementation. A completed initial fix does not complete later substantive corrections described by the original user context. Do not infer task completion merely from checker_statuses=met or from the agent pausing.
 Only when you explicitly consider the entire original task and its substantive follow-ups complete, and all disclosed persona requests satisfied, return {action:"accept",kind:"wait",content:"",requirement_id:null,base_task_complete:true,completion_reason:nonempty string}. Explain in completion_reason why the original task goals and current requests are complete; do not give only a persona verdict. The host independently checks persona requirements. If an undisclosed requirement still needs release, the host will ask you to disclose it before acceptance. If any base task work or authorization remains, send a concrete original-user follow-up instead. Never mark requirements met yourself. Do not use [DONE].'''
+        system+='\nInternal assessment errors are controller issues, not missing agent evidence. When assessment_unavailable is nonempty, do not ask the agent to repeat explanations or fix assessor references. Answer actual clarification/permission questions and address independently observed task gaps normally; otherwise remain silent. Never accept completion based on an unavailable assessment.'
 
         view={'persona':self.persona_view(due),'task':self.binding['original_instruction'],
               # Make composition explicit for the replacement simulator.  The
@@ -195,12 +258,15 @@ Only when you explicitly consider the entire original task and its substantive f
               'completion_attempt':completion_attempt,
               'interaction_checkpoint':bool(observation.get('interaction_checkpoint',False)),
               'history':self.history,'visible_diff':observation.get('visible_diff',''),
-              'checker_statuses':[{k:v[k] for k in ['requirement_id','status'] if k in v} for v in self.verdicts.values()],
+              'checker_statuses':[{k:v[k] for k in ['requirement_id','status'] if k in v}
+                                  for v in self.verdicts.values() if not v.get('judge_error')],
+              'assessment_unavailable':assessment_unavailable,
               'due':{'id':due['id'],'statement':due['statement']} if due else None}
         errors=[];decision=None
         for attempt in range(3):
             try:
-                candidate=await self.call('user_simulator',system,{**view,'previous_rejections':errors})
+                prompt=decision_envelope(due,acceptance_ready=(completion_attempt and not assessment_unavailable and self.completion_ready()))+system
+                candidate=await self.call('user_simulator',prompt,{**view,'previous_rejections':errors})
                 expected={'action','kind','content','requirement_id'}
                 if candidate.get('action')=='accept':expected|={'base_task_complete','completion_reason'}
                 if set(candidate)!=expected:raise ValueError('Wrong decision keys')
@@ -233,14 +299,17 @@ Only when you explicitly consider the entire original task and its substantive f
                 for r in requirements:
                     if r['id'] not in self.disclosed and r is not due and r['statement'] in candidate['content']:raise ValueError('Premature requirement')
                 decision=candidate;break
-            except Exception as exc:errors.append(type(exc).__name__+': '+str(exc))
+            except Exception as exc:
+                from swe_persona.api_recovery import is_api_interruption
+                if is_api_interruption(exc):raise
+                errors.append(type(exc).__name__+': '+str(exc))
         if decision is None:
             self.invalid.append('simulator_policy_failure:'+str(turn))
             decision={'action':'no-op','kind':'wait','content':'','requirement_id':None}
         if decision['action']=='message' and due:self.disclosed[due['id']]=turn
         gate_override=False
         gate_active=(completion_attempt or observation.get('interaction_checkpoint',False)) and turn>=min(r['earliest_turn'] for r in requirements)
-        if gate_active and not self.completion_ready() and decision['action']=='no-op':
+        if gate_active and not assessment_unavailable and not self.completion_ready() and decision['action']=='no-op':
             # A completion claim is not a valid stopping signal until every
             # disclosed requirement has a grounded `met` verdict. Keep the
             # coding session alive with a deterministic, non-leaking nudge.
@@ -262,7 +331,9 @@ Only when you explicitly consider the entire original task and its substantive f
                              'completion_reason':decision.get('completion_reason'),
                              'stage_index':self.stage_index,
                              'disclosed':dict(self.disclosed),'verdicts':copy.deepcopy(self.verdicts),
-                             'invalid':list(self.invalid),'revision':self.revision})
+                             'invalid':list(self.invalid),'judge_errors':copy.deepcopy(self.judge_errors),
+                             'last_valid_verdicts':copy.deepcopy(self.last_valid_verdicts),
+                             'revision':self.revision})
         return decision
 
     async def finish(self,evidence):
@@ -278,12 +349,7 @@ Only when you explicitly consider the entire original task and its substantive f
             self.verdicts={}
             for req in self.binding['persona']['bound_evolved_requirements']:
                 if req['id'] in self.disclosed:
-                    try:
-                        self.verdicts[req['id']]=await judge_requirement(self.call,req,evidence,self.disclosed[req['id']],self.registry,self.binding['evaluation_policy'],self.task_context())
-                    except Exception as exc:
-                        self.verdicts[req['id']]={'requirement_id':req['id'],'status':'unknown',
-                            'reason':'judge_error:'+type(exc).__name__,'evidence_refs':[]}
-                        self.invalid.append('requirement_judge_error:'+req['id'])
+                    self.verdicts[req['id']]=await self._review_requirement(req,evidence,'final')
         try:audit=await asyncio.wait_for(
             audit_interaction(self.call,self.history,self.binding['persona'],self.disclosed),
             timeout=float(os.environ.get('PERSONA_AUDIT_TIMEOUT_SEC','120')))
@@ -295,6 +361,8 @@ Only when you explicitly consider the entire original task and its substantive f
         if final_status=='met' and not self.user_accepted:
             final_status='unknown'
         return {'requirements':requirements,'undisclosed':undisclosed,'native_disclosed':dict(self.native_disclosed),'invalid_reasons':self.invalid,
+                'judge_errors':copy.deepcopy(self.judge_errors),
+                'last_valid_verdicts':copy.deepcopy(self.last_valid_verdicts),
                 'stage_index':self.stage_index,
                 'persona_status':final_status,'user_accepted':self.user_accepted,
                 'user_acceptance_policy':self.user_acceptance_policy,

@@ -3,8 +3,9 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import time
 
-VERSION = "tb3-requirement-loop-v1"
+VERSION = "tb3-requirement-loop-v2"
 STATUSES = ("MET", "PARTIAL", "UNMET", "UNOBSERVABLE")
 JUDGE_PROMPT = """You are the requirement assessor inside a simulated TB3 user's interaction.
 Judge ONLY the currently disclosed requirement against its frozen rubric, using the
@@ -30,8 +31,11 @@ of relevant validation, if adequate for the requirement. Do not demand a new tes
 raw logs, or access to private files unless the disclosed requirement requires it.
 Agent reports are visible claims, NOT independent proof of repository correctness.
 Never infer hidden tool output, tests, source files, solutions or verifier results.
-For each criterion return its status, reason and verbatim evidence quotations with
-eligible agent event IDs AFTER disclosure. MET must cite eligible evidence.
+For each criterion return its status, reason and evidence_refs chosen ONLY from
+eligible_evidence_event_ids AFTER disclosure. Do not generate quotes or rewrite
+source text. The controller retrieves unchanged source messages for each ref.
+MET must cite eligible evidence supporting the criterion; an ID alone does not
+establish fulfillment. Select relevant messages, not arbitrary eligible IDs.
 Earlier evidence may explain context but cannot alone establish post-disclosure
 fulfillment. Reassess earlier MET decisions on completion attempts; later visible
 contradictions must reopen the requirement. A previous decision is not evidence.
@@ -54,6 +58,9 @@ actual clarification/approval question as well. Never claim you ran checks yours
 Do not disclose or guess future requirements. Earlier requirements remain binding.
 When corrective_request_required is true, return action=message and a nonempty,
 natural request addressing the current review. Do not silently continue or finish.
+Internal assessment errors are handled by the controller. They are not evidence
+of missing agent work. Never ask the agent to repeat a report or fix assessor
+citations because of an internal error, and never expose internal exceptions.
 Only return done when end_allowed is true AND you are satisfied with the visible
 interaction. Even then, your decision is perceived fulfillment, not verified success.
 """
@@ -66,9 +73,8 @@ def _obj(properties):
 
 TEXT = {"type": "string"}
 STATUS = {"type": "string", "enum": list(STATUSES)}
-EVIDENCE = _obj({"event_id": TEXT, "quote": TEXT})
 CRITERION = _obj({"criterion_id": TEXT, "status": STATUS,
-                 "evidence": {"type": "array", "items": EVIDENCE}, "reason": TEXT})
+                 "evidence_refs": {"type": "array", "items": TEXT}, "reason": TEXT})
 SCHEMA = _obj({"requirement_id": TEXT, "verdict": STATUS,
                "criteria": {"type": "array", "items": CRITERION},
                "feedback": TEXT, "reason": TEXT})
@@ -135,9 +141,11 @@ POLICY = {"version": VERSION, "advance_only_on": "MET",
           "objective_verifier_feedback_to_simulator": False,
           "scope": "persona and persona_static; baseline and vague_no_evolution retain their controls",
           "timing": "earliest turn retained; event/deadline or predecessor MET makes next eligible; an unresolved predecessor always blocks",
-          "failure_classification": "API/schema/reference failures are infrastructure unknown, never requirement UNMET"}
+          "online_judge_recovery": "registered-refs-internal-recovery-v2",
+          "online_judge_attempts": 2,
+          "failure_classification": "Internal assessment errors preserve the last valid verdict and consume no corrective user turns; persistent completion errors freeze artifacts for independent grading"}
 
-BUNDLE_README = """# TB3 requirement-review protocol v1
+BUNDLE_README = """# TB3 requirement-review protocol v2
 
 This directory is host/controller-only. Publish all files under tests/persona/;
 do not mount them into the evaluated agent environment. Use the dataset's run.py
@@ -148,9 +156,16 @@ and runtime_bundle.tar.gz. Native harbor run alone does not enable this protocol
 3. At a progress report, completion attempt, or work checkpoint with new visible
    evidence, run judge_prompt.md with rubric.json's CURRENT requirement, the persona,
    original public task, and user-visible messages with stable event IDs.
-4. Validate response_schema.json, exact criterion coverage and verbatim quotations
-   from eligible agent messages after disclosure. Invalid/API responses are
-   infrastructure errors, not UNMET verdicts.
+4. Constrain requirement/criterion IDs and evidence_refs to registered eligible
+   IDs in a per-call schema. Retrieve exact source messages on the host; the judge
+   never copies quotations. Allow at most two semantic validation attempts sharing
+   one original deadline. Transport exhaustion is not retried again here.
+   Audit errors separately from valid verdicts; never replace a valid verdict with
+   an infrastructure-generated UNOBSERVABLE. Do not ask the agent to repair an
+   assessor error. At a progress checkpoint, continue authorized work silently;
+   at completion, freeze artifacts for independent grading if assessment is still
+   unavailable. No internal failure can consume a corrective user turn or release
+   a future requirement. Host binding/integrity failures still fail.
 5. MET permits the next requirement; PARTIAL/UNMET requests revision;
    UNOBSERVABLE requests visible evidence. A disclosure deadline cannot bypass
    an unresolved requirement. Never reveal undisclosed rubric entries to the judge.
@@ -219,12 +234,10 @@ def normalize_review(value, rubric, ledger, disclosed_at):
     eligible = {e["event_id"]: e for e in ledger
                 if e["role"] == "agent" and e["event_index"] > disclosed_at}
     for criterion in value["criteria"]:
-        if criterion["status"] == "MET" and not criterion["evidence"]:
+        if criterion["status"] == "MET" and not criterion["evidence_refs"]:
             raise ValueError("MET lacks visible evidence")
-        for evidence in criterion["evidence"]:
-            event = eligible.get(evidence["event_id"])
-            if not event or not evidence["quote"].strip() or evidence["quote"] not in event["content"]:
-                raise ValueError("Judge cited ineligible or invented evidence")
+        if any(ref not in eligible for ref in criterion["evidence_refs"]):
+            raise ValueError("Judge cited an ineligible or invented evidence reference")
     statuses = [c["status"] for c in value["criteria"]]
     verdict = ("MET" if all(s == "MET" for s in statuses) else "UNMET" if "UNMET" in statuses
                else "PARTIAL" if any(s in {"MET", "PARTIAL"} for s in statuses) else "UNOBSERVABLE")
@@ -240,7 +253,8 @@ class RequirementLoop:
         self.requirements = binding["proposal"]["requirements"]
         self.rubric = {r["requirement_id"]: r for r in rubric["requirements"]}
         self.states = {r["id"]: {"state": "undisclosed", "disclosed_at": None, "review": None,
-                                 "reviewed_through": -1, "reviews": 0} for r in self.requirements}
+                                 "reviewed_through": -1, "reviews": 0,
+                                 "assessment_unavailable": False, "assessment_errors": []} for r in self.requirements}
         self.history = []
 
     def snapshot(self):
@@ -259,10 +273,16 @@ class RequirementLoop:
                      if self.states[r["id"]]["state"] == "pending"), None)
 
     def complete(self):
-        return all(s["state"] == "met" for s in self.states.values())
+        return all(s["state"] == "met" and not s["assessment_unavailable"] for s in self.states.values())
+
+    def review_target(self):
+        return next((r["id"] for r in self.requirements
+                     if self.states[r["id"]]["state"] != "undisclosed"
+                     and (self.states[r["id"]]["assessment_unavailable"]
+                          or self.states[r["id"]]["state"] == "pending")), None)
 
     def due(self, turn, event):
-        if self.current() is not None:
+        if self.current() is not None or any(s["assessment_unavailable"] for s in self.states.values()):
             return None
         met = {rid for rid, s in self.states.items() if s["state"] == "met"}
         for req in self.requirements:
@@ -282,12 +302,41 @@ class RequirementLoop:
         result = normalize_review(result, self.rubric[rid], ledger, state["disclosed_at"])
         state.update(state="met" if result["verdict"] == "MET" else "pending",
                      review=copy.deepcopy(result), reviewed_through=max((e["event_index"] for e in ledger), default=-1),
-                     reviews=state["reviews"] + 1)
+                     reviews=state["reviews"] + 1, assessment_unavailable=False)
         self.history.append(copy.deepcopy(result))
+
+    def record_unavailable(self, rid, error, ledger):
+        state = self.states[rid]
+        if state["state"] == "undisclosed":
+            raise ValueError("Cannot assess an undisclosed requirement")
+        state["assessment_unavailable"] = True
+        state["reviewed_through"] = max((e["event_index"] for e in ledger), default=-1)
+        state["assessment_errors"].append({"error_type": type(error).__name__, "error": str(error)})
+
+
+class AssessmentUnavailable(Exception):
+    """No accepted online verdict; independent final grading remains available."""
+
+
+def response_schema(rubric, ledger, disclosed_at):
+    schema = copy.deepcopy(SCHEMA)
+    # TEXT is shared by several fields in SCHEMA; replace nodes instead of
+    # mutating an aliased dict and constraining unrelated free-text fields.
+    schema["properties"]["requirement_id"] = {"type": "string", "enum": [rubric["requirement_id"]]}
+    criterion = schema["properties"]["criteria"]["items"]["properties"]
+    criterion["criterion_id"] = {"type": "string", "enum": [c["criterion_id"] for c in rubric["criteria"]]}
+    refs = [e["event_id"] for e in ledger if e["role"] == "agent" and e["event_index"] > disclosed_at]
+    if refs:
+        criterion["evidence_refs"]["items"] = {"type": "string", "enum": refs}
+    else:
+        criterion["evidence_refs"]["maxItems"] = 0
+    return schema
 
 
 def assess(binding, loop, rid, events, audit_dir, timeout, completion=False, call_fn=None):
-    from azure_client import call
+    if call_fn is None:
+        from azure_client import call
+        call_fn = call
     state = loop.states[rid]
     ledger = visible_ledger(events)
     payload = {"original_public_contract": binding["public_contract"]["instruction"],
@@ -296,6 +345,42 @@ def assess(binding, loop, rid, events, audit_dir, timeout, completion=False, cal
                "eligible_evidence_event_ids": [e["event_id"] for e in ledger
                    if e["role"] == "agent" and e["event_index"] > state["disclosed_at"]],
                "completion_attempt": completion}
-    value = (call_fn or call)("requirement_judge", JUDGE_PROMPT + "\nINPUT JSON:\n" +
-                             json.dumps(payload, ensure_ascii=False), SCHEMA, audit_dir, timeout=timeout)
-    return normalize_review(value, loop.rubric[rid], ledger, state["disclosed_at"])
+    from swe_persona.api_recovery import append_audit, is_api_interruption
+    import jsonschema
+    schema = response_schema(loop.rubric[rid], ledger, state["disclosed_at"])
+    deadline = time.monotonic() + timeout
+    rejection = None
+    for attempt in range(POLICY["online_judge_attempts"]):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        prompt = JUDGE_PROMPT + "\nINPUT JSON:\n" + json.dumps(payload, ensure_ascii=False)
+        if rejection:
+            prompt += "\nCONTROLLER VALIDATION FEEDBACK:\n" + rejection
+        try:
+            value = call_fn("requirement_judge", prompt, schema, audit_dir, timeout=remaining)
+            jsonschema.validate(value, schema)
+            value = normalize_review(value, loop.rubric[rid], ledger, state["disclosed_at"])
+            sources = {e["event_id"]: e for e in ledger}
+            append_audit(Path(audit_dir) / "review-evidence.jsonl", {
+                "requirement_id": rid, "verdict": value["verdict"],
+                "evidence": {ref: sources[ref] for c in value["criteria"] for ref in c["evidence_refs"]},
+                "source": "unchanged_host_ledger", "completion_attempt": completion,
+            })
+            return value
+        except Exception as exc:
+            retry = (attempt + 1 < POLICY["online_judge_attempts"]
+                     and isinstance(exc, (ValueError, jsonschema.ValidationError))
+                     and not is_api_interruption(exc) and time.monotonic() < deadline)
+            append_audit(Path(audit_dir) / "review-recovery.jsonl", {
+                "policy": POLICY["online_judge_recovery"], "requirement_id": rid,
+                "status": "internal_retry" if retry else "assessment_unavailable",
+                "attempt": attempt + 1, "error_type": type(exc).__name__, "error": str(exc)[:2000],
+                "completion_attempt": completion, "evidence_event_ids": payload["eligible_evidence_event_ids"],
+            })
+            if not retry:
+                raise AssessmentUnavailable("Online requirement assessment unavailable; no agent correction requested") from exc
+            rejection = ("The previous response was rejected. Return a complete replacement using the same rubric. "
+                         "Use only registered evidence_refs and no quotations. Do not change the verdict merely to "
+                         "bypass validation. Error: " + str(exc)[:1500])
+    raise AssessmentUnavailable("Online requirement assessment deadline exhausted; no agent correction requested")

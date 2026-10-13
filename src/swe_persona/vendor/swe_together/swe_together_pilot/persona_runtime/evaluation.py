@@ -261,6 +261,7 @@ async def judge_requirement(call,requirement,evidence,activation,registry,policy
         # overall judgment against its fixed rubric instead of requiring three
         # independently quoted votes for every positive, negative, and unknown
         # clause. Keep evidence references so a reviewer can audit the result.
+        judge_error = None
         try:
             answer=await call('requirement_rubric_judge',
                 'Judge whether the coding agent fulfilled this disclosed persona request in the current run. '
@@ -282,7 +283,10 @@ async def judge_requirement(call,requirement,evidence,activation,registry,policy
                 'Cite only refs present in the evidence. The registered bindings explain the task but are not themselves '
                 'proof of the agent\'s work. The task verifier is separate from this persona decision.',value)
         except Exception as exc:
-            answer={'status':'unknown','reason':'judge_error:'+type(exc).__name__}
+            from swe_persona.api_recovery import is_api_interruption
+            judge_error={'error_type':type(exc).__name__,'error':str(exc)[:2000]}
+            answer={'status':'unknown','reason':'judge_error:'+type(exc).__name__,
+                    'api_interrupted':is_api_interruption(exc)}
         valid_refs={item['ref'] for group in ('artifacts','messages','executions')
                     for item in value['evidence'][group] if isinstance(item,dict) and isinstance(item.get('ref'),str)}
         work_refs={item['ref'] for group in ('artifacts','messages','executions')
@@ -299,7 +303,11 @@ async def judge_requirement(call,requirement,evidence,activation,registry,policy
                 # User requests establish authorization, not completed work.
                 or (status=='met' and not any(ref in work_refs for ref in refs))):
             status='unknown';refs=[];reason='invalid_or_ungrounded_judge_response'
+            if judge_error is None:
+                judge_error={'error_type':'InvalidJudgeResponse','error':reason}
         return {'requirement_id':requirement['id'],'status':status,'evidence_refs':refs,
+                'judge_error':judge_error,
+                'api_interrupted':answer.get('api_interrupted',False) if isinstance(answer,dict) else False,
                 'reason':reason,'revision':evidence['revision'],'calibrated':False,
                 'source_judge_tier':requirement['rubric']['judge'],'evaluation_policy':policy,
                 'judge_prompt_revision':'overall_completion_v2',

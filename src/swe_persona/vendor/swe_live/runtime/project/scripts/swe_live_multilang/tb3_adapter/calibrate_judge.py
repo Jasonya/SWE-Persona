@@ -9,7 +9,8 @@ from llm import Llm, CallLog
 from support import file_hash, read
 from execution_policy import BudgetClient
 from build_task import save
-from protocol import requirement, JUDGE_PROMPT, JUDGE_SCHEMA, validate_judgment, eligible, visible_persona
+from protocol import (requirement, JUDGE_PROMPT, eligible, visible_persona, assess_judgment,
+    AssessmentUnavailable, CALIBRATION_POLICY, calibration_allowed, calibration_report, checker)
 
 
 def calibrate(output,model):
@@ -20,7 +21,7 @@ def calibrate(output,model):
     if report.exists():
         old=read(report)
         if old['identity']!=identity: raise ValueError('Calibration fingerprint changed; use new output')
-        if not old['passed']: raise ValueError('Previous calibration failed; inspect controls before retrying')
+        if not calibration_allowed(old): raise ValueError('Previous calibration failed; inspect controls before retrying')
         return old
     persona=load_persona('manager_no_code'); req=requirement(persona)
     cases=[('complete','- Recommendation: Ship after approval.\n- Progress: Local checks passed.\n- Decision: Approval remains pending.',2,['MET']),
@@ -47,21 +48,24 @@ def calibrate(output,model):
             'rubric':{'requirement_id':'R1','criteria':[{'criterion_id':'R1.contract','text':req['disclosure']}]},
             'eligible_visible_messages':eligible(messages,2)}
         try:
-            result=llm.json_obj([{'role':'system','content':JUDGE_PROMPT},{'role':'user','content':json.dumps(payload)}],
-                JUDGE_SCHEMA,schema_name='requirement_judge',role='calibration.'+name,max_output_tokens=1600)
-            validate_judgment(result,req,messages,2)
-        except Exception as error:
-            save(report,{'identity':identity,'controls':records,'passed':False,
-                'failed_control':name,'error_type':type(error).__name__,
-                'scope':'Calibration infrastructure/protocol error; no task episode started'})
-            raise
-        item={'name':name,'input':payload,'judgment':result,'expected':expected,'passed':result['verdict'] in expected}
+            result=assess_judgment(llm,req,messages,payload,JUDGE_PROMPT,'calibration.'+name,
+                                  output/'audit'/(name+'-assessment.json'))
+        except AssessmentUnavailable as error:
+            item={'name':name,'input':payload,'judgment':None,'expected':expected,'passed':False,
+                  'status':'unknown','assessment_unavailable':True,'errors':error.errors}
+        else:
+            passed=result['verdict'] in expected
+            item={'name':name,'input':payload,'judgment':result,'expected':expected,'passed':passed,
+                  'status':'pass' if passed else 'fail'}
+        item['independent_control']=checker(req,eligible(messages,2))
         records.append(item); save(output/'audit'/(name+'.json'),item)
-        print('[calibration]',name,item['passed'],flush=True)
-    value={'identity':identity,'controls':records,'passed':all(r['passed'] for r in records),
-        'scope':'Minimal judge controls; not full task/persona semantic validation'}
+        # Persist partial progress without allowing an incomplete calibration gate.
+        save(report,{'identity':identity,'controls':records,'passed':False,'status':'running',
+                     'execution_allowed':False,'policy':CALIBRATION_POLICY})
+        print('[calibration]',name,item['status'],flush=True)
+    value=calibration_report(identity,records)
     save(report,value)
-    if not value['passed']: raise ValueError('Judge calibration failed; no task episodes started')
+    if not calibration_allowed(value): raise ValueError('Judge calibration failed semantic controls; this profile is blocked')
     return value
 
 

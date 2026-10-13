@@ -13,6 +13,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 from .llm import Llm, LlmSchemaError
+from swe_persona.simulator_output import response_envelope, prepend_envelope
 
 ACTIONS = ("answer", "disclose_requirement", "request_fix", "request_evidence", "done")
 
@@ -33,7 +34,16 @@ def decision_schema(allowed: Optional[List[str]] = None) -> Dict[str, Any]:
 
 def render_messages(prompt: str, persona_card: Dict[str, Any], observation: Dict[str, Any],
                     rejected: Optional[Dict[str, Any]] = None) -> List[Dict[str, str]]:
-    system = prompt + "\n\n## Your persona\n" + json.dumps(persona_card, ensure_ascii=False, indent=1)
+    allowed=observation['allowed_actions']
+    action='answer' if 'answer' in allowed else allowed[0]
+    example={'action':action,'user_message':'Thank you.' if action=='done' else 'Please address the current request.',
+             'satisfied':action=='done','rationale':'Format example; decide from the current observation.'}
+    envelope=response_envelope(decision_schema(allowed),example,{
+        'action':'Choose only from the current allowed_actions.',
+        'user_message':'The coding agent receives this user message. Preserve all due original facts and requirement disclosures exactly, within the current permissions.',
+        'satisfied':'Use true only with action=done when done is currently allowed. Otherwise use false.',
+        'rationale':'A short private explanation for the audit; it is not delivered to the coding agent.'})
+    system = prepend_envelope(prompt,envelope) + "\n\n## Your persona\n" + json.dumps(persona_card, ensure_ascii=False, indent=1)
     user = ("Decide your next message to the coding agent.  Reply with one JSON object.\n\n"
             + json.dumps(observation, ensure_ascii=False, indent=1))
     if rejected is not None:

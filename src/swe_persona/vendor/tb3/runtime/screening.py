@@ -1,4 +1,5 @@
 """Baseline-pass/persona-fail selection under the same interaction wall limit."""
+from swe_persona.api_recovery import assess_interrupted
 
 
 def benchmark_outcome(run):
@@ -12,6 +13,27 @@ def benchmark_outcome(run):
     )
     if timed_out:
         return {'status': 'fail', 'score': 0, 'failure_reasons': ['wall_timeout']}
+    if terminal in {'api_interrupted', 'online_judge_unavailable'}:
+        reward = run.get('original_reward')
+        checks = run.get('persona_check', {}).get('checks', {})
+        required = set(run.get('required_requirement_ids', checks))
+        statuses = [checks.get(rid, {}).get('status') for rid in required]
+        disclosed = set(episode.get('disclosed_requirement_ids', []))
+        persona = (False if 'fail' in statuses or disclosed != required else
+                   True if statuses and all(s == 'pass' for s in statuses) else None)
+        native = reward == 1 if reward is not None else None
+        progress = any(e.get('kind') == 'shell_result' and 'error' not in e.get('data', {})
+                       or e.get('kind') == 'agent_action' and e.get('data', {}).get('message', '').strip()
+                       for e in episode.get('events', []))
+        assessment = assess_interrupted(native, persona, artifacts_available=run.get('artifact_integrity') is True,
+                                        progress=progress, integrity=not run.get('exception')
+                                        and run.get('artifact_integrity') is not False)
+        if terminal == 'online_judge_unavailable':
+            assessment.update(api_interrupted=False, online_judge_unavailable=True,
+                              outcome_reason='online_judge_unavailable',
+                              policy='registered-refs-internal-recovery-v2')
+        return dict(assessment, score=1 if assessment['status'] == 'pass' else
+                    0 if assessment['status'] == 'fail' else None, failure_reasons=[])
     if run.get('exception') or run.get('api_errors') or terminal not in {'ready','turn_limit','user_abandoned','agent_action_limit'}:
         return {'status': 'invalid', 'score': None, 'failure_reasons': [],
                 'reason': 'Infrastructure, provider, protocol or controller error'}
