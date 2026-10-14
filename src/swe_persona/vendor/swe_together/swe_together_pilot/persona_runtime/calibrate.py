@@ -8,9 +8,11 @@ from .binding import PILOT,validate
 from .evaluation import judge_requirement,CheckerRegistry
 from .public_run import Calls,runtime_hash,write
 from .calibration_fixtures import load_cases
+from .calibration_policy import decision as calibration_decision, mode
 from .simulator import UserSimulator
 
 async def calibrate(config,out):
+    calibration_mode = mode()
     out.mkdir(parents=True,exist_ok=True)
     cases,fixture_validation=load_cases()
     write(out/'fixture-validation.json',fixture_validation)
@@ -37,10 +39,12 @@ async def calibrate(config,out):
         async with sem:
             calls=Calls(config,out/case['id'].replace('/','__'))
             result=await judge_requirement(calls,b['persona']['bound_evolved_requirements'][0],case['evidence'],case['activation_turn'],CheckerRegistry(),b['evaluation_policy'],{'original_instruction':b['original_instruction'],'original_user_context':b['original_user_context'],'initial_pool_persona':b['initial_pool_persona']})
-        item={'id':case['id'],'expected':case['expected'],'actual':result['status'],'passed':case['expected']==result['status'],'judgment':result}
+        item={'id':case['id'],'expected':case['expected'],'actual':result['status'],
+              'passed':case['expected']==result['status'] and not result.get('judge_error')
+                       and not result.get('api_interrupted'),'judgment':result}
         results.append(item);write(out/'progress.json',results);print(json.dumps({k:v for k,v in item.items() if k!='judgment'}),flush=True)
     await asyncio.gather(*(one(c) for c in cases))
-    report={'profile':'swe-together','passed':all(r['passed'] for r in results) and all(r['passed'] for r in simulator_controls),
+    report={'profile':'swe-together',**calibration_decision(results,simulator_controls,fixture_validation,calibration_mode),
         'runtime_sha256':runtime_hash(),'api_config_sha256':fingerprint(config),'binding_sha256s':sorted(binding_hashes),
         'controls':len(results),'passed_controls':sum(r['passed'] for r in results),
         'fixture_validation':fixture_validation,
@@ -51,5 +55,5 @@ async def calibrate(config,out):
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--config',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
-    r=asyncio.run(calibrate(load_config(a.config,True),a.output));return 0 if r['passed'] else 1
+    r=asyncio.run(calibrate(load_config(a.config,True),a.output));return 0 if r['execution_allowed'] else 1
 if __name__=='__main__':raise SystemExit(main())

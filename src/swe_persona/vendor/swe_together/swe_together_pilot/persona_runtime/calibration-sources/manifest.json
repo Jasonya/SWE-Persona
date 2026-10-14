@@ -80,6 +80,71 @@
       "path": "repositories/dataclaw/tests/test_anonymizer.py",
       "url": "https://raw.githubusercontent.com/peteromallet/dataclaw/3c0991467af69675afa948c3ada45475a772fbeb/tests/test_anonymizer.py",
       "sha256": "8b20be9ba7f98dd5f4bf72baa9a14110e9816d7c671409f947d2f7789df1e48a"
+    },
+    {
+      "path": "repositories/agent-swarm/Dockerfile.worker",
+      "url": "https://raw.githubusercontent.com/desplega-ai/agent-swarm/c3a5e1a4c0eeadd87057629db2baa0d0abe1575e/Dockerfile.worker",
+      "sha256": "d03ed5b71dd9743fa7993dd0d7800d631caf85a7de765c2473c18f67cc985eec"
+    },
+    {
+      "path": "repositories/agent-swarm/docker-entrypoint.sh",
+      "url": "https://raw.githubusercontent.com/desplega-ai/agent-swarm/c3a5e1a4c0eeadd87057629db2baa0d0abe1575e/docker-entrypoint.sh",
+      "sha256": "c00e4216893ab7b8ad60dcfb2a1363aeb5b501e5db1eec58e3080f895e6f6ad3"
+    },
+    {
+      "path": "repositories/agent-swarm/new-ui/src/api/hooks/use-agents.ts",
+      "url": "https://raw.githubusercontent.com/desplega-ai/agent-swarm/c3a5e1a4c0eeadd87057629db2baa0d0abe1575e/new-ui/src/api/hooks/use-agents.ts",
+      "sha256": "01bceeb61ad8aa371d83617b2077fd394c121a1fd66aa9ea0e25db74f02dd525"
+    },
+    {
+      "path": "repositories/cli/cmd/entire/cli/explain.go",
+      "url": "https://raw.githubusercontent.com/entireio/cli/b386f5faaec2fd2f78941bf3621d89d4000bdf9d/cmd/entire/cli/explain.go",
+      "sha256": "75b2cdacb80248b91b0e85b6eac505619693404ec3d3b390e2543fb335767d05"
+    },
+    {
+      "path": "repositories/cli/cmd/entire/cli/explain_test.go",
+      "url": "https://raw.githubusercontent.com/entireio/cli/b386f5faaec2fd2f78941bf3621d89d4000bdf9d/cmd/entire/cli/explain_test.go",
+      "sha256": "15e89d44ceef530f6fd6466edcecfa2833e0e0e96eb406f1d981eadab992dfab"
+    },
+    {
+      "path": "derived/agent-swarm/bounded_acceptance_checks.py",
+      "sha256": "0babd2e3c25c3ab7ab1674ac9cd069fb985c84c6ff85cd5b6b8a6d73951b67d8",
+      "derived_from": {
+        "source": "tasks/agent-swarm-task-ea4bd8/tests/test.sh",
+        "recipe": "first PYEOF Python body plus all-verdicts exit check"
+      }
+    },
+    {
+      "path": "derived/agent-swarm/Dockerfile.worker",
+      "sha256": "a55366c92170c6914e6317377f0e50c4853184c44f484adc5c4ecc5e219bde8e",
+      "derived_from": {
+        "baseline": "repositories/agent-swarm/Dockerfile.worker",
+        "patch_sha256": "97763e3eabdc8b1da85a355ab227a0e71c3135b48fcd808b8ee159eea83894af"
+      }
+    },
+    {
+      "path": "derived/agent-swarm/docker-entrypoint.sh",
+      "sha256": "08ab98d87f52ec93dbba48de1d474b29a03097b24c3380159e561f6d5a2ef249",
+      "derived_from": {
+        "baseline": "repositories/agent-swarm/docker-entrypoint.sh",
+        "patch_sha256": "97763e3eabdc8b1da85a355ab227a0e71c3135b48fcd808b8ee159eea83894af"
+      }
+    },
+    {
+      "path": "derived/agent-swarm/new-ui/src/api/hooks/use-agents.ts",
+      "sha256": "f694ba38edb9888184d40b77e76f3d7d237b5c75d31b266dfc64bdd73102df1a",
+      "derived_from": {
+        "baseline": "repositories/agent-swarm/new-ui/src/api/hooks/use-agents.ts",
+        "patch_sha256": "97763e3eabdc8b1da85a355ab227a0e71c3135b48fcd808b8ee159eea83894af"
+      }
+    },
+    {
+      "path": "derived/dataclaw-windows/anonymizer.py",
+      "sha256": "e0ffb612f4bbfa2b0ff91022e487dbac6eb50d9671a1939c4a517789dd73416c",
+      "derived_from": {
+        "baseline": "repositories/dataclaw/dataclaw/anonymizer.py",
+        "patch_sha256": "ec6eb387acc945bfcb30ebb68fb28a65b959bf8ccf93fcf10b2d1a51ca246456"
+      }
     }
   ]
 }

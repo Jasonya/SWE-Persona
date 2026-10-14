@@ -1,0 +1,1019 @@
+{
+  "protocol": "swe-together-calibration-fixtures-v3",
+  "max_positive_disagreements": 2,
+  "cases": [
+    {
+      "id": "agent-swarm-task-ea4bd8__first_time_pr_contributor__first_pr_reviewable_handoff/positive",
+      "binding_file": "full109/bindings/agent-swarm-task-ea4bd8__first_time_pr_contributor__first_pr_reviewable_handoff.json",
+      "binding_sha256": "4344060fad8ba5543874f22c07f4f232f56cfd287bc34f1d0f0637520ddfb1c7",
+      "expected": "met",
+      "fixture_kind": "pr_handoff",
+      "degradation_allowed": true,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "97763e3eabdc8b1da85a355ab227a0e71c3135b48fcd808b8ee159eea83894af",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "repository:package.json",
+          "sha256": "a40973f281b4dc1431f4e576ec5b0b0bb7d582a45dcfe107626b82f611fc7058",
+          "source": "repositories/agent-swarm/package.json"
+        },
+        {
+          "ref": "tests/install_config.json",
+          "sha256": "4a71720c745493e4404fa1de6e1a31af4367cacc31ae758df073dac71ba379ca",
+          "source": "tasks/agent-swarm-task-ea4bd8/tests/install_config.json"
+        },
+        {
+          "ref": "tests/test_manifest.yaml",
+          "sha256": "bfad9aa558c91ded5b7c59bf507d84df3db349907cadb44efe226cb7b34b2d30",
+          "source": "tasks/agent-swarm-task-ea4bd8/tests/test_manifest.yaml"
+        },
+        {
+          "ref": "host:validation_inventory",
+          "sha256": "20cc1c91fb0f34351d039e0dd9aa694af991537f5b4ab476c8b09736132c5514",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "4fb0e7a7f90ccbc365587f34a16e26144af7d495e2f8f2b59aba5e8740757fac",
+      "inventory_origins": [
+        "repositories/agent-swarm/package.json",
+        "tasks/agent-swarm-task-ea4bd8/tests/install_config.json",
+        "tasks/agent-swarm-task-ea4bd8/tests/test.sh",
+        "tasks/agent-swarm-task-ea4bd8/tests/test_manifest.yaml"
+      ]
+    },
+    {
+      "id": "agent-swarm-task-ea4bd8__first_time_pr_contributor__first_pr_reviewable_handoff/negative",
+      "binding_file": "full109/bindings/agent-swarm-task-ea4bd8__first_time_pr_contributor__first_pr_reviewable_handoff.json",
+      "binding_sha256": "4344060fad8ba5543874f22c07f4f232f56cfd287bc34f1d0f0637520ddfb1c7",
+      "expected": "not_met",
+      "fixture_kind": "pr_handoff",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "97763e3eabdc8b1da85a355ab227a0e71c3135b48fcd808b8ee159eea83894af",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "repository:package.json",
+          "sha256": "a40973f281b4dc1431f4e576ec5b0b0bb7d582a45dcfe107626b82f611fc7058",
+          "source": "repositories/agent-swarm/package.json"
+        },
+        {
+          "ref": "tests/install_config.json",
+          "sha256": "4a71720c745493e4404fa1de6e1a31af4367cacc31ae758df073dac71ba379ca",
+          "source": "tasks/agent-swarm-task-ea4bd8/tests/install_config.json"
+        },
+        {
+          "ref": "tests/test_manifest.yaml",
+          "sha256": "bfad9aa558c91ded5b7c59bf507d84df3db349907cadb44efe226cb7b34b2d30",
+          "source": "tasks/agent-swarm-task-ea4bd8/tests/test_manifest.yaml"
+        },
+        {
+          "ref": "host:validation_inventory",
+          "sha256": "20cc1c91fb0f34351d039e0dd9aa694af991537f5b4ab476c8b09736132c5514",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "4fb0e7a7f90ccbc365587f34a16e26144af7d495e2f8f2b59aba5e8740757fac",
+      "inventory_origins": [
+        "repositories/agent-swarm/package.json",
+        "tasks/agent-swarm-task-ea4bd8/tests/install_config.json",
+        "tasks/agent-swarm-task-ea4bd8/tests/test.sh",
+        "tasks/agent-swarm-task-ea4bd8/tests/test_manifest.yaml"
+      ]
+    },
+    {
+      "id": "agent-swarm-task-ea4bd8__student_needing_explanation__student_learning_constraints_and_check/positive",
+      "binding_file": "full109/bindings/agent-swarm-task-ea4bd8__student_needing_explanation__student_learning_constraints_and_check.json",
+      "binding_sha256": "c72f4ff50a505f116d0273942b9b9226d79b0c2f7130aa94d8ce83ef476746b4",
+      "expected": "met",
+      "fixture_kind": "static_learning",
+      "degradation_allowed": true,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "97763e3eabdc8b1da85a355ab227a0e71c3135b48fcd808b8ee159eea83894af",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "Dockerfile.worker",
+          "sha256": "a55366c92170c6914e6317377f0e50c4853184c44f484adc5c4ecc5e219bde8e",
+          "source": "derived/agent-swarm/Dockerfile.worker"
+        },
+        {
+          "ref": "docker-entrypoint.sh",
+          "sha256": "08ab98d87f52ec93dbba48de1d474b29a03097b24c3380159e561f6d5a2ef249",
+          "source": "derived/agent-swarm/docker-entrypoint.sh"
+        },
+        {
+          "ref": "new-ui/src/api/hooks/use-agents.ts",
+          "sha256": "f694ba38edb9888184d40b77e76f3d7d237b5c75d31b266dfc64bdd73102df1a",
+          "source": "derived/agent-swarm/new-ui/src/api/hooks/use-agents.ts"
+        },
+        {
+          "ref": "host:bounded_acceptance_checker",
+          "sha256": "0babd2e3c25c3ab7ab1674ac9cd069fb985c84c6ff85cd5b6b8a6d73951b67d8",
+          "source": "derived/agent-swarm/bounded_acceptance_checks.py"
+        }
+      ],
+      "execution_history_sha256": "ea6844f942bff4503a3902f2b0e306daa40d2fa23c81ec6d10e974c1a8a42189",
+      "fixture_sha256": "136b3e67f9fc16bae074f2639a7f6f1a3c265cd4e34d412a2ca3acd6cf0da0f6"
+    },
+    {
+      "id": "agent-swarm-task-ea4bd8__student_needing_explanation__student_learning_constraints_and_check/negative",
+      "binding_file": "full109/bindings/agent-swarm-task-ea4bd8__student_needing_explanation__student_learning_constraints_and_check.json",
+      "binding_sha256": "c72f4ff50a505f116d0273942b9b9226d79b0c2f7130aa94d8ce83ef476746b4",
+      "expected": "not_met",
+      "fixture_kind": "static_learning",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "97763e3eabdc8b1da85a355ab227a0e71c3135b48fcd808b8ee159eea83894af",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "Dockerfile.worker",
+          "sha256": "a55366c92170c6914e6317377f0e50c4853184c44f484adc5c4ecc5e219bde8e",
+          "source": "derived/agent-swarm/Dockerfile.worker"
+        },
+        {
+          "ref": "docker-entrypoint.sh",
+          "sha256": "08ab98d87f52ec93dbba48de1d474b29a03097b24c3380159e561f6d5a2ef249",
+          "source": "derived/agent-swarm/docker-entrypoint.sh"
+        },
+        {
+          "ref": "new-ui/src/api/hooks/use-agents.ts",
+          "sha256": "f694ba38edb9888184d40b77e76f3d7d237b5c75d31b266dfc64bdd73102df1a",
+          "source": "derived/agent-swarm/new-ui/src/api/hooks/use-agents.ts"
+        },
+        {
+          "ref": "host:bounded_acceptance_checker",
+          "sha256": "0babd2e3c25c3ab7ab1674ac9cd069fb985c84c6ff85cd5b6b8a6d73951b67d8",
+          "source": "derived/agent-swarm/bounded_acceptance_checks.py"
+        }
+      ],
+      "execution_history_sha256": "ea6844f942bff4503a3902f2b0e306daa40d2fa23c81ec6d10e974c1a8a42189",
+      "fixture_sha256": "136b3e67f9fc16bae074f2639a7f6f1a3c265cd4e34d412a2ca3acd6cf0da0f6"
+    },
+    {
+      "id": "amytis-task-e3714e__first_time_pr_contributor__first_pr_reviewable_handoff/positive",
+      "binding_file": "full109/bindings/amytis-task-e3714e__first_time_pr_contributor__first_pr_reviewable_handoff.json",
+      "binding_sha256": "bab7ada9c28179a8a137c1251eca75cc73ec3d974891d8f4945c2c120d0fd66b",
+      "expected": "met",
+      "fixture_kind": "pr_handoff",
+      "degradation_allowed": true,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "e95b356718acd05d9ad2e44d272c576e4f6fb4f9a69c4fdbdf2f27e0c5e36836",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "repository:package.json",
+          "sha256": "36b14efeb56a930343072737d17e2e68654b9ea8803e6b72e5c3be099dace378",
+          "source": "repositories/amytis/package.json"
+        },
+        {
+          "ref": "tests/install_config.json",
+          "sha256": "4133e0cfedb42422515cf94eb5bc781b47ce850474255626c7e9eeb867025585",
+          "source": "tasks/amytis-task-e3714e/tests/install_config.json"
+        },
+        {
+          "ref": "tests/test_manifest.yaml",
+          "sha256": "6c16df0e30eee1d56d7a42b6e3ec14c12cace10729a5c380d2298a6d106f7f93",
+          "source": "tasks/amytis-task-e3714e/tests/test_manifest.yaml"
+        },
+        {
+          "ref": "host:validation_inventory",
+          "sha256": "9eec3a768aa2bb67549fd100c702ac6632cfcf4031a5344cdf1731df0c9c87c6",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "f6d0b6957c2d5f5a3bd91abc0fc3465d0edf4693275eae6c0d5d5610f66735c9",
+      "inventory_origins": [
+        "repositories/amytis/package.json",
+        "tasks/amytis-task-e3714e/tests/install_config.json",
+        "tasks/amytis-task-e3714e/tests/test.sh",
+        "tasks/amytis-task-e3714e/tests/test_manifest.yaml"
+      ]
+    },
+    {
+      "id": "amytis-task-e3714e__first_time_pr_contributor__first_pr_reviewable_handoff/negative",
+      "binding_file": "full109/bindings/amytis-task-e3714e__first_time_pr_contributor__first_pr_reviewable_handoff.json",
+      "binding_sha256": "bab7ada9c28179a8a137c1251eca75cc73ec3d974891d8f4945c2c120d0fd66b",
+      "expected": "not_met",
+      "fixture_kind": "pr_handoff",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "e95b356718acd05d9ad2e44d272c576e4f6fb4f9a69c4fdbdf2f27e0c5e36836",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "repository:package.json",
+          "sha256": "36b14efeb56a930343072737d17e2e68654b9ea8803e6b72e5c3be099dace378",
+          "source": "repositories/amytis/package.json"
+        },
+        {
+          "ref": "tests/install_config.json",
+          "sha256": "4133e0cfedb42422515cf94eb5bc781b47ce850474255626c7e9eeb867025585",
+          "source": "tasks/amytis-task-e3714e/tests/install_config.json"
+        },
+        {
+          "ref": "tests/test_manifest.yaml",
+          "sha256": "6c16df0e30eee1d56d7a42b6e3ec14c12cace10729a5c380d2298a6d106f7f93",
+          "source": "tasks/amytis-task-e3714e/tests/test_manifest.yaml"
+        },
+        {
+          "ref": "host:validation_inventory",
+          "sha256": "9eec3a768aa2bb67549fd100c702ac6632cfcf4031a5344cdf1731df0c9c87c6",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "f6d0b6957c2d5f5a3bd91abc0fc3465d0edf4693275eae6c0d5d5610f66735c9",
+      "inventory_origins": [
+        "repositories/amytis/package.json",
+        "tasks/amytis-task-e3714e/tests/install_config.json",
+        "tasks/amytis-task-e3714e/tests/test.sh",
+        "tasks/amytis-task-e3714e/tests/test_manifest.yaml"
+      ]
+    },
+    {
+      "id": "amytis-task-e3714e__manager_no_code__manager_business_acceptance_and_risk/positive",
+      "binding_file": "full109/bindings/amytis-task-e3714e__manager_no_code__manager_business_acceptance_and_risk.json",
+      "binding_sha256": "fa9b41db938d23749b20ec4a08ac51860ee8c6519e64176e8b477bb551d0bbd2",
+      "expected": "met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "e95b356718acd05d9ad2e44d272c576e4f6fb4f9a69c4fdbdf2f27e0c5e36836",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "amytis-task-e3714e__manager_no_code__manager_business_acceptance_and_risk/negative",
+      "binding_file": "full109/bindings/amytis-task-e3714e__manager_no_code__manager_business_acceptance_and_risk.json",
+      "binding_sha256": "fa9b41db938d23749b20ec4a08ac51860ee8c6519e64176e8b477bb551d0bbd2",
+      "expected": "not_met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "e95b356718acd05d9ad2e44d272c576e4f6fb4f9a69c4fdbdf2f27e0c5e36836",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "banodoco-video-perf-optimize__review_decision_reader__review_verification_boundary/positive",
+      "binding_file": "full109/bindings/banodoco-video-perf-optimize__review_decision_reader__review_verification_boundary.json",
+      "binding_sha256": "6a633b02820e09c9ab1bf081934f9e45cc05abffcfa2f1bbaacb6e980404b389",
+      "expected": "met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "components/TopGenerations.tsx",
+          "sha256": "c2f487f5ed4857a1335645f282491e78fe36d0dae7059696ea1bb0556542f672",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "banodoco-video-perf-optimize__review_decision_reader__review_verification_boundary/negative",
+      "binding_file": "full109/bindings/banodoco-video-perf-optimize__review_decision_reader__review_verification_boundary.json",
+      "binding_sha256": "6a633b02820e09c9ab1bf081934f9e45cc05abffcfa2f1bbaacb6e980404b389",
+      "expected": "not_met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "components/TopGenerations.tsx",
+          "sha256": "c2f487f5ed4857a1335645f282491e78fe36d0dae7059696ea1bb0556542f672",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "banodoco-video-perf-optimize__reviewer_evidence_first__review_scope_and_sources/positive",
+      "binding_file": "full109/bindings/banodoco-video-perf-optimize__reviewer_evidence_first__review_scope_and_sources.json",
+      "binding_sha256": "dc735a3abf7c5afadc6183b00e844c77772a3a3f67062c38815453d9019c2491",
+      "expected": "met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "components/TopGenerations.tsx",
+          "sha256": "c2f487f5ed4857a1335645f282491e78fe36d0dae7059696ea1bb0556542f672",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "banodoco-video-perf-optimize__reviewer_evidence_first__review_scope_and_sources/negative",
+      "binding_file": "full109/bindings/banodoco-video-perf-optimize__reviewer_evidence_first__review_scope_and_sources.json",
+      "binding_sha256": "dc735a3abf7c5afadc6183b00e844c77772a3a3f67062c38815453d9019c2491",
+      "expected": "not_met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "components/TopGenerations.tsx",
+          "sha256": "c2f487f5ed4857a1335645f282491e78fe36d0dae7059696ea1bb0556542f672",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "cli-task-70c88c__first_time_pr_contributor__first_pr_reviewable_handoff/positive",
+      "binding_file": "full109/bindings/cli-task-70c88c__first_time_pr_contributor__first_pr_reviewable_handoff.json",
+      "binding_sha256": "3f522f43e8911615478c8b83e12854d638e44401ba4ed911bb025ca09d1e8135",
+      "expected": "met",
+      "fixture_kind": "pr_handoff",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "22d47484170385bae9499bb596d0b52d350cfe1f86e7c49d64ee7ba01d8cd51a",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "tests/install_config.json",
+          "sha256": "8037a4ab10dbd319632aebda2e257ac7b24729bd2fd51baf7511308f879b8d41",
+          "source": "tasks/cli-task-70c88c/tests/install_config.json"
+        },
+        {
+          "ref": "tests/test_manifest.yaml",
+          "sha256": "e7c4062c9b9544699152487f3cc100e9844c96f0d9dd581dcc0a575ca747c56a",
+          "source": "tasks/cli-task-70c88c/tests/test_manifest.yaml"
+        },
+        {
+          "ref": "host:validation_inventory",
+          "sha256": "5014734d75d99917eaa5c4c042ac195fd794ec176e6c92b18b174b5bcd642c6a",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "ed0d3d437640088bff427ff2dfd9633c8f553d0be4804e126f3c10cc5e25453b",
+      "inventory_origins": [
+        "tasks/cli-task-70c88c/tests/install_config.json",
+        "tasks/cli-task-70c88c/tests/test.sh",
+        "tasks/cli-task-70c88c/tests/test_manifest.yaml"
+      ]
+    },
+    {
+      "id": "cli-task-70c88c__first_time_pr_contributor__first_pr_reviewable_handoff/negative",
+      "binding_file": "full109/bindings/cli-task-70c88c__first_time_pr_contributor__first_pr_reviewable_handoff.json",
+      "binding_sha256": "3f522f43e8911615478c8b83e12854d638e44401ba4ed911bb025ca09d1e8135",
+      "expected": "not_met",
+      "fixture_kind": "pr_handoff",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "22d47484170385bae9499bb596d0b52d350cfe1f86e7c49d64ee7ba01d8cd51a",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "tests/install_config.json",
+          "sha256": "8037a4ab10dbd319632aebda2e257ac7b24729bd2fd51baf7511308f879b8d41",
+          "source": "tasks/cli-task-70c88c/tests/install_config.json"
+        },
+        {
+          "ref": "tests/test_manifest.yaml",
+          "sha256": "e7c4062c9b9544699152487f3cc100e9844c96f0d9dd581dcc0a575ca747c56a",
+          "source": "tasks/cli-task-70c88c/tests/test_manifest.yaml"
+        },
+        {
+          "ref": "host:validation_inventory",
+          "sha256": "5014734d75d99917eaa5c4c042ac195fd794ec176e6c92b18b174b5bcd642c6a",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "ed0d3d437640088bff427ff2dfd9633c8f553d0be4804e126f3c10cc5e25453b",
+      "inventory_origins": [
+        "tasks/cli-task-70c88c/tests/install_config.json",
+        "tasks/cli-task-70c88c/tests/test.sh",
+        "tasks/cli-task-70c88c/tests/test_manifest.yaml"
+      ]
+    },
+    {
+      "id": "cli-task-70c88c__student_needing_explanation__student_error_counterexample/positive",
+      "binding_file": "full109/bindings/cli-task-70c88c__student_needing_explanation__student_error_counterexample.json",
+      "binding_sha256": "653ccbb8655f23f217537669a2d2c3770c0e38f40e538258ec5d2f28e0302df5",
+      "expected": "met",
+      "fixture_kind": "old_path",
+      "degradation_allowed": true,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "22d47484170385bae9499bb596d0b52d350cfe1f86e7c49d64ee7ba01d8cd51a",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "baseline:cmd/entire/cli/explain.go",
+          "sha256": "75b2cdacb80248b91b0e85b6eac505619693404ec3d3b390e2543fb335767d05",
+          "source": "repositories/cli/cmd/entire/cli/explain.go"
+        },
+        {
+          "ref": "baseline:explain-entrypoint-and-router",
+          "sha256": "f603a9942195644dc2829cc9e9655e7851e80ae87a1def8f3de389bc3cca6398",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "a771ae7d1c3145d07b2af7a2dcbb1987bd09fa5bee45955710cac208e634ba0e"
+    },
+    {
+      "id": "cli-task-70c88c__student_needing_explanation__student_error_counterexample/negative",
+      "binding_file": "full109/bindings/cli-task-70c88c__student_needing_explanation__student_error_counterexample.json",
+      "binding_sha256": "653ccbb8655f23f217537669a2d2c3770c0e38f40e538258ec5d2f28e0302df5",
+      "expected": "not_met",
+      "fixture_kind": "old_path",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "22d47484170385bae9499bb596d0b52d350cfe1f86e7c49d64ee7ba01d8cd51a",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "baseline:cmd/entire/cli/explain.go",
+          "sha256": "75b2cdacb80248b91b0e85b6eac505619693404ec3d3b390e2543fb335767d05",
+          "source": "repositories/cli/cmd/entire/cli/explain.go"
+        },
+        {
+          "ref": "baseline:explain-entrypoint-and-router",
+          "sha256": "f603a9942195644dc2829cc9e9655e7851e80ae87a1def8f3de389bc3cca6398",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "a771ae7d1c3145d07b2af7a2dcbb1987bd09fa5bee45955710cac208e634ba0e"
+    },
+    {
+      "id": "cli-task-c4c7e9__review_decision_reader__review_authorized_next_step/positive",
+      "binding_file": "full109/bindings/cli-task-c4c7e9__review_decision_reader__review_authorized_next_step.json",
+      "binding_sha256": "fe4f90d7f561495c71672daaee8d4795eba9b677a2a4a1ecc04f6b159a135235",
+      "expected": "met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "cmd/entire/cli/strategy/manual_commit_hooks.go",
+          "sha256": "4b07def7418ace634edea34757a9ab92b03111537528770bd9c0b544ba173586",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "cli-task-c4c7e9__review_decision_reader__review_authorized_next_step/negative",
+      "binding_file": "full109/bindings/cli-task-c4c7e9__review_decision_reader__review_authorized_next_step.json",
+      "binding_sha256": "fe4f90d7f561495c71672daaee8d4795eba9b677a2a4a1ecc04f6b159a135235",
+      "expected": "not_met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "cmd/entire/cli/strategy/manual_commit_hooks.go",
+          "sha256": "4b07def7418ace634edea34757a9ab92b03111537528770bd9c0b544ba173586",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "cli-task-c4c7e9__reviewer_evidence_first__review_scope_and_sources/positive",
+      "binding_file": "full109/bindings/cli-task-c4c7e9__reviewer_evidence_first__review_scope_and_sources.json",
+      "binding_sha256": "be6da4594e40f6a4f1eafa3c5808fc96d5a6de86d28df81b86ab5480b2372b67",
+      "expected": "met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "cmd/entire/cli/strategy/manual_commit_hooks.go",
+          "sha256": "4b07def7418ace634edea34757a9ab92b03111537528770bd9c0b544ba173586",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "cli-task-c4c7e9__reviewer_evidence_first__review_scope_and_sources/negative",
+      "binding_file": "full109/bindings/cli-task-c4c7e9__reviewer_evidence_first__review_scope_and_sources.json",
+      "binding_sha256": "be6da4594e40f6a4f1eafa3c5808fc96d5a6de86d28df81b86ab5480b2372b67",
+      "expected": "not_met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "cmd/entire/cli/strategy/manual_commit_hooks.go",
+          "sha256": "4b07def7418ace634edea34757a9ab92b03111537528770bd9c0b544ba173586",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "comfyui-gemma3-sliding-window__review_decision_reader__review_authorized_next_step/positive",
+      "binding_file": "full109/bindings/comfyui-gemma3-sliding-window__review_decision_reader__review_authorized_next_step.json",
+      "binding_sha256": "031969037ba1cc63f99a1142d7f5366c27d40e753a9cca5334ea23d6e2819671",
+      "expected": "met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "comfy/text_encoders/llama.py",
+          "sha256": "675a04ee20f8447a2251a6cf881bc6180845cf7ea62c542a0c37bdb14606d2bb",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "comfyui-gemma3-sliding-window__review_decision_reader__review_authorized_next_step/negative",
+      "binding_file": "full109/bindings/comfyui-gemma3-sliding-window__review_decision_reader__review_authorized_next_step.json",
+      "binding_sha256": "031969037ba1cc63f99a1142d7f5366c27d40e753a9cca5334ea23d6e2819671",
+      "expected": "not_met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "comfy/text_encoders/llama.py",
+          "sha256": "675a04ee20f8447a2251a6cf881bc6180845cf7ea62c542a0c37bdb14606d2bb",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "comfyui-gemma3-sliding-window__reviewer_evidence_first__review_scope_and_sources/positive",
+      "binding_file": "full109/bindings/comfyui-gemma3-sliding-window__reviewer_evidence_first__review_scope_and_sources.json",
+      "binding_sha256": "982ae9d14a160ecb90512ab1f9d23a1290389cfe33655424733d01626f292243",
+      "expected": "met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "comfy/text_encoders/llama.py",
+          "sha256": "675a04ee20f8447a2251a6cf881bc6180845cf7ea62c542a0c37bdb14606d2bb",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "comfyui-gemma3-sliding-window__reviewer_evidence_first__review_scope_and_sources/negative",
+      "binding_file": "full109/bindings/comfyui-gemma3-sliding-window__reviewer_evidence_first__review_scope_and_sources.json",
+      "binding_sha256": "982ae9d14a160ecb90512ab1f9d23a1290389cfe33655424733d01626f292243",
+      "expected": "not_met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "comfy/text_encoders/llama.py",
+          "sha256": "675a04ee20f8447a2251a6cf881bc6180845cf7ea62c542a0c37bdb14606d2bb",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "comfyui-lumina2-lora-prefix__review_decision_reader__review_verification_boundary/positive",
+      "binding_file": "full109/bindings/comfyui-lumina2-lora-prefix__review_decision_reader__review_verification_boundary.json",
+      "binding_sha256": "7b064123951bae26cc6b098f468fc0b6f91847372ab100942be1a30e387cb853",
+      "expected": "met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "comfy/lora.py",
+          "sha256": "37b702ba3891d30ec7ed4244430fc4b07e70a49b3a75089a08c4fb7d77d5bf95",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "comfyui-lumina2-lora-prefix__review_decision_reader__review_verification_boundary/negative",
+      "binding_file": "full109/bindings/comfyui-lumina2-lora-prefix__review_decision_reader__review_verification_boundary.json",
+      "binding_sha256": "7b064123951bae26cc6b098f468fc0b6f91847372ab100942be1a30e387cb853",
+      "expected": "not_met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "comfy/lora.py",
+          "sha256": "37b702ba3891d30ec7ed4244430fc4b07e70a49b3a75089a08c4fb7d77d5bf95",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "comfyui-lumina2-lora-prefix__reviewer_evidence_first__review_concrete_case_and_limit/positive",
+      "binding_file": "full109/bindings/comfyui-lumina2-lora-prefix__reviewer_evidence_first__review_concrete_case_and_limit.json",
+      "binding_sha256": "e420801539787e2d92ccb8557306ac4d3bfc926288cb075b45380a22883cbf6b",
+      "expected": "met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "comfy/lora.py",
+          "sha256": "37b702ba3891d30ec7ed4244430fc4b07e70a49b3a75089a08c4fb7d77d5bf95",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "comfyui-lumina2-lora-prefix__reviewer_evidence_first__review_concrete_case_and_limit/negative",
+      "binding_file": "full109/bindings/comfyui-lumina2-lora-prefix__reviewer_evidence_first__review_concrete_case_and_limit.json",
+      "binding_sha256": "e420801539787e2d92ccb8557306ac4d3bfc926288cb075b45380a22883cbf6b",
+      "expected": "not_met",
+      "fixture_kind": "bounded_snapshot",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "comfy/lora.py",
+          "sha256": "37b702ba3891d30ec7ed4244430fc4b07e70a49b3a75089a08c4fb7d77d5bf95",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "46ff26890520f92da968bcc5033f3f73b7013fad900ad8b84f720f94cb98ad68"
+    },
+    {
+      "id": "dataclaw-anonymizer-tests__review_decision_reader__review_conclusion_and_uncertainty/positive",
+      "binding_file": "full109/bindings/dataclaw-anonymizer-tests__review_decision_reader__review_conclusion_and_uncertainty.json",
+      "binding_sha256": "3f86297bb270bf328bc7732c458d4a03fc43501e09d758840f189515def81014",
+      "expected": "met",
+      "fixture_kind": "branch_review",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "af15c5dbeece8a46c8daa5d20fe4b5481cea147c9aee2b4bf39c403acba5ce86",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "dataclaw/anonymizer.py",
+          "sha256": "56de4431cdf48a4033ad3bd38184fdace30e7a4355f13bdd0ac665dc30b4c709",
+          "source": "tasks/dataclaw-anonymizer-tests/environment/windows_anonymizer.py"
+        },
+        {
+          "ref": "host:review_snapshot",
+          "sha256": "5ea719ea7ede76be2a45518b840f268cb8159ac8be96c3e576a57137c0a95cc2",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "1f5d737269fb4760a5ff683ceb1b5edc8dc25084f3c8fa36a999dbe0c396c3db",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "7620befb18793aff87bbc7bf3b0deaa7ac272d05ceb456f5780bbb25ad7f3c9a"
+    },
+    {
+      "id": "dataclaw-anonymizer-tests__review_decision_reader__review_conclusion_and_uncertainty/negative",
+      "binding_file": "full109/bindings/dataclaw-anonymizer-tests__review_decision_reader__review_conclusion_and_uncertainty.json",
+      "binding_sha256": "3f86297bb270bf328bc7732c458d4a03fc43501e09d758840f189515def81014",
+      "expected": "not_met",
+      "fixture_kind": "branch_review",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "af15c5dbeece8a46c8daa5d20fe4b5481cea147c9aee2b4bf39c403acba5ce86",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "dataclaw/anonymizer.py",
+          "sha256": "56de4431cdf48a4033ad3bd38184fdace30e7a4355f13bdd0ac665dc30b4c709",
+          "source": "tasks/dataclaw-anonymizer-tests/environment/windows_anonymizer.py"
+        },
+        {
+          "ref": "host:review_snapshot",
+          "sha256": "5ea719ea7ede76be2a45518b840f268cb8159ac8be96c3e576a57137c0a95cc2",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "1f5d737269fb4760a5ff683ceb1b5edc8dc25084f3c8fa36a999dbe0c396c3db",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "7620befb18793aff87bbc7bf3b0deaa7ac272d05ceb456f5780bbb25ad7f3c9a"
+    },
+    {
+      "id": "dataclaw-anonymizer-tests__reviewer_evidence_first__review_observation_vs_inference/positive",
+      "binding_file": "full109/bindings/dataclaw-anonymizer-tests__reviewer_evidence_first__review_observation_vs_inference.json",
+      "binding_sha256": "af9a8294dceef3469942a96725374851889285967a209ce23d5a48e593922ca8",
+      "expected": "met",
+      "fixture_kind": "branch_review",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "af15c5dbeece8a46c8daa5d20fe4b5481cea147c9aee2b4bf39c403acba5ce86",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "dataclaw/anonymizer.py",
+          "sha256": "56de4431cdf48a4033ad3bd38184fdace30e7a4355f13bdd0ac665dc30b4c709",
+          "source": "tasks/dataclaw-anonymizer-tests/environment/windows_anonymizer.py"
+        },
+        {
+          "ref": "host:review_snapshot",
+          "sha256": "5ea719ea7ede76be2a45518b840f268cb8159ac8be96c3e576a57137c0a95cc2",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "1f5d737269fb4760a5ff683ceb1b5edc8dc25084f3c8fa36a999dbe0c396c3db",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "7620befb18793aff87bbc7bf3b0deaa7ac272d05ceb456f5780bbb25ad7f3c9a"
+    },
+    {
+      "id": "dataclaw-anonymizer-tests__reviewer_evidence_first__review_observation_vs_inference/negative",
+      "binding_file": "full109/bindings/dataclaw-anonymizer-tests__reviewer_evidence_first__review_observation_vs_inference.json",
+      "binding_sha256": "af9a8294dceef3469942a96725374851889285967a209ce23d5a48e593922ca8",
+      "expected": "not_met",
+      "fixture_kind": "branch_review",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "af15c5dbeece8a46c8daa5d20fe4b5481cea147c9aee2b4bf39c403acba5ce86",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "dataclaw/anonymizer.py",
+          "sha256": "56de4431cdf48a4033ad3bd38184fdace30e7a4355f13bdd0ac665dc30b4c709",
+          "source": "tasks/dataclaw-anonymizer-tests/environment/windows_anonymizer.py"
+        },
+        {
+          "ref": "host:review_snapshot",
+          "sha256": "5ea719ea7ede76be2a45518b840f268cb8159ac8be96c3e576a57137c0a95cc2",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "1f5d737269fb4760a5ff683ceb1b5edc8dc25084f3c8fa36a999dbe0c396c3db",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "7620befb18793aff87bbc7bf3b0deaa7ac272d05ceb456f5780bbb25ad7f3c9a"
+    },
+    {
+      "id": "dataclaw-windows-path-fix__first_time_pr_contributor__first_pr_patch_explanation/positive",
+      "binding_file": "full109/bindings/dataclaw-windows-path-fix__first_time_pr_contributor__first_pr_patch_explanation.json",
+      "binding_sha256": "fc2a5231ae214f0e37b0b2592188f02b4573babf49190d9618c45c27208dd32e",
+      "expected": "met",
+      "fixture_kind": "windows_boundary",
+      "degradation_allowed": true,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "ec6eb387acc945bfcb30ebb68fb28a65b959bf8ccf93fcf10b2d1a51ca246456",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "baseline:dataclaw/anonymizer.py",
+          "sha256": "5ebdc75b4d61664280a8d5b00b6ea89dfa140515599f2ddd7c298f785df23124",
+          "source": "repositories/dataclaw/dataclaw/anonymizer.py"
+        },
+        {
+          "ref": "dataclaw/anonymizer.py",
+          "sha256": "e0ffb612f4bbfa2b0ff91022e487dbac6eb50d9671a1939c4a517789dd73416c",
+          "source": "derived/dataclaw-windows/anonymizer.py"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "0cf261acfe727a634cfa7de6b9522f54115a370e452468b866aa2b3ac9a4b7a0"
+    },
+    {
+      "id": "dataclaw-windows-path-fix__first_time_pr_contributor__first_pr_patch_explanation/negative",
+      "binding_file": "full109/bindings/dataclaw-windows-path-fix__first_time_pr_contributor__first_pr_patch_explanation.json",
+      "binding_sha256": "fc2a5231ae214f0e37b0b2592188f02b4573babf49190d9618c45c27208dd32e",
+      "expected": "not_met",
+      "fixture_kind": "windows_boundary",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "ec6eb387acc945bfcb30ebb68fb28a65b959bf8ccf93fcf10b2d1a51ca246456",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "baseline:dataclaw/anonymizer.py",
+          "sha256": "5ebdc75b4d61664280a8d5b00b6ea89dfa140515599f2ddd7c298f785df23124",
+          "source": "repositories/dataclaw/dataclaw/anonymizer.py"
+        },
+        {
+          "ref": "dataclaw/anonymizer.py",
+          "sha256": "e0ffb612f4bbfa2b0ff91022e487dbac6eb50d9671a1939c4a517789dd73416c",
+          "source": "derived/dataclaw-windows/anonymizer.py"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "0cf261acfe727a634cfa7de6b9522f54115a370e452468b866aa2b3ac9a4b7a0"
+    },
+    {
+      "id": "dataclaw-windows-path-fix__student_needing_explanation__student_patch_and_boundary_reasoning/positive",
+      "binding_file": "full109/bindings/dataclaw-windows-path-fix__student_needing_explanation__student_patch_and_boundary_reasoning.json",
+      "binding_sha256": "6c9b26210fac3ce6ed1db3c94e1ba601f9e950e84c5cb82e12414c714f49efaf",
+      "expected": "met",
+      "fixture_kind": "windows_boundary",
+      "degradation_allowed": true,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "ec6eb387acc945bfcb30ebb68fb28a65b959bf8ccf93fcf10b2d1a51ca246456",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "baseline:dataclaw/anonymizer.py",
+          "sha256": "5ebdc75b4d61664280a8d5b00b6ea89dfa140515599f2ddd7c298f785df23124",
+          "source": "repositories/dataclaw/dataclaw/anonymizer.py"
+        },
+        {
+          "ref": "dataclaw/anonymizer.py",
+          "sha256": "e0ffb612f4bbfa2b0ff91022e487dbac6eb50d9671a1939c4a517789dd73416c",
+          "source": "derived/dataclaw-windows/anonymizer.py"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "0cf261acfe727a634cfa7de6b9522f54115a370e452468b866aa2b3ac9a4b7a0"
+    },
+    {
+      "id": "dataclaw-windows-path-fix__student_needing_explanation__student_patch_and_boundary_reasoning/negative",
+      "binding_file": "full109/bindings/dataclaw-windows-path-fix__student_needing_explanation__student_patch_and_boundary_reasoning.json",
+      "binding_sha256": "6c9b26210fac3ce6ed1db3c94e1ba601f9e950e84c5cb82e12414c714f49efaf",
+      "expected": "not_met",
+      "fixture_kind": "windows_boundary",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:final_diff",
+          "sha256": "ec6eb387acc945bfcb30ebb68fb28a65b959bf8ccf93fcf10b2d1a51ca246456",
+          "origin": "reviewed_synthetic_fixture"
+        },
+        {
+          "ref": "baseline:dataclaw/anonymizer.py",
+          "sha256": "5ebdc75b4d61664280a8d5b00b6ea89dfa140515599f2ddd7c298f785df23124",
+          "source": "repositories/dataclaw/dataclaw/anonymizer.py"
+        },
+        {
+          "ref": "dataclaw/anonymizer.py",
+          "sha256": "e0ffb612f4bbfa2b0ff91022e487dbac6eb50d9671a1939c4a517789dd73416c",
+          "source": "derived/dataclaw-windows/anonymizer.py"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "0cf261acfe727a634cfa7de6b9522f54115a370e452468b866aa2b3ac9a4b7a0"
+    },
+    {
+      "id": "dataclaw-anonymizer-tests__review_decision_reader__review_conclusion_and_uncertainty/missing-review-diff",
+      "binding_file": "full109/bindings/dataclaw-anonymizer-tests__review_decision_reader__review_conclusion_and_uncertainty.json",
+      "binding_sha256": "3f86297bb270bf328bc7732c458d4a03fc43501e09d758840f189515def81014",
+      "expected": "unknown",
+      "fixture_kind": "missing_review_diff",
+      "degradation_allowed": false,
+      "artifacts": [
+        {
+          "ref": "host:workspace_change_status",
+          "sha256": "4c02c8ec6cb3a6987230622018d027907a1532538125c068926ee061b4c38f92",
+          "origin": "reviewed_synthetic_fixture"
+        }
+      ],
+      "execution_history_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "fixture_sha256": "d7464654e8d874bdbf6de641c5d46214c2be09321c076a6edaca53fc22ff4a52"
+    }
+  ]
+}
