@@ -12,6 +12,8 @@ def metrics(results, selected):
                 and isinstance(r.get('persona_pass'), bool)
                 and r.get('verification_complete') is not False]
     passes = sum(r['status'] == 'pass' for r in valid)
+    provisional = [r for r in results if r.get('score_provisional') is True
+                   or (r.get('calibration') or {}).get('score_provisional') is True]
     native = [r['native_pass'] for r in valid if isinstance(r.get('native_pass'), bool)]
     persona = [r['persona_pass'] for r in valid if isinstance(r.get('persona_pass'), bool)]
     return {
@@ -23,8 +25,12 @@ def metrics(results, selected):
         'complete_native_and_persona_grading': len(complete),
         'total_timeouts': sum(r.get('outcome_reason') == 'total_timeout' for r in results),
         'joint_passes': passes,
-        'joint_success_rate': passes / selected if selected and len(valid) == selected else None,
-        'joint_success_rate_valid_only': passes / len(valid) if valid else None,
+        'joint_success_rate': passes / selected if selected and len(valid) == selected and not provisional else None,
+        'joint_success_rate_valid_only': passes / len(valid) if valid and not provisional else None,
+        'provisional_evaluations': len(provisional),
+        'score_status': 'provisional' if provisional else 'standard',
+        'provisional_joint_success_rate': passes / selected if provisional and selected and len(valid) == selected else None,
+        'provisional_joint_success_rate_valid_only': passes / len(valid) if provisional and valid else None,
         'native_grades_observed': len(native),
         'native_pass_rate_observed': sum(native) / len(native) if native else None,
         'persona_grades_observed': len(persona),
@@ -63,6 +69,7 @@ def summarize(data):
         'Errors, cancelled/skipped tasks, calibration failures and dry runs are excluded from valid-only rates and remain in status counts.',
         'Valid-only and observed-grade rates use the displayed denominators; they are not full-selection scores.',
         'Compare models only with matched selection, runtime, simulator/judge, API settings, budgets and hardware.',
+        'Degraded SWE-Together calibration permits diagnostic execution only: formal joint rates remain null; provisional rates and observed component grades are retained.',
     ]
     return report
 

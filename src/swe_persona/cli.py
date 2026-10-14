@@ -44,6 +44,12 @@ def worker(root,mode,output,config=None,gate=None,time_limit=None):
                 cleanup_empty_session_networks(output)
 
 def gate_allows_execution(value):
+    if value.get('profile') == 'swe-together':
+        from .vendor.swe_together.swe_together_pilot.persona_runtime.calibration_policy import calibration_allowed, mode
+        report = value.get('calibration') or {}
+        return (value.get('worker_exit_code') == 0 and value.get('execution_allowed') is True
+                and value.get('passed') is report.get('passed') and report.get('mode') == mode()
+                and calibration_allowed(report))
     if value.get('passed') is True:
         return True
     if value.get('profile') != 'swe-bench-live' or value.get('worker_exit_code') != 0:
@@ -55,6 +61,9 @@ def gate_allows_execution(value):
 def calibrate(dataset,profile,config_path,cache):
     config=load_config(config_path,require_keys=True)
     identity={'profile':profile,'api_config_sha256':fingerprint(config),'runtime_sha256':runtime_hash()}
+    if profile=='swe-together':
+        from .vendor.swe_together.swe_together_pilot.persona_runtime.calibration_policy import mode
+        identity['calibration_mode']=mode()
     key=hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest()[:20]
     gate=Path(cache)/'calibration'/key;marker=gate/'gate.json'
     if marker.exists() and gate_allows_execution(json.loads(marker.read_text())):return gate
@@ -77,6 +86,9 @@ def calibrate(dataset,profile,config_path,cache):
         report=json.loads(p.read_text()) if p.exists() else {}
         passed=rc==0 and bool(report.get('passed'))
     value=dict(identity,passed=passed,worker_exit_code=rc,execution_allowed=passed)
+    if profile=='swe-together':
+        from .vendor.swe_together.swe_together_pilot.persona_runtime.calibration_policy import calibration_allowed
+        value.update(calibration=report,execution_allowed=rc==0 and calibration_allowed(report))
     if profile=='swe-bench-live':
         from .swe_live import live_calibration_allowed
         value.update(calibration=report,execution_allowed=rc==0 and live_calibration_allowed(report))
@@ -190,6 +202,14 @@ def normalize_result(row,out,rc):
         for field in ('error','final_error','error_category','end_reason','simulator_message_recoveries',
                       'stop_reason','interaction_stalled','interaction_stall_policy'):
             if d.get(field) is not None:result[field]=d[field]
+        if profile=='swe-together' and d.get('calibration'):
+            result['calibration']=d['calibration']
+            result['score_provisional']=d['calibration'].get('score_provisional') is True
+    if profile=='swe-together' and (out/'run-config.json').is_file():
+        calibration=json.loads((out/'run-config.json').read_text()).get('calibration')
+        if calibration:
+            result.setdefault('calibration',calibration)
+            result['score_provisional']=calibration.get('score_provisional') is True
     write(out/'result.json',result)
     return result
 
@@ -258,7 +278,8 @@ def main():
         value=json.loads((gate/'gate.json').read_text())
         run_config=json.loads((args.output/'run-config.json').read_text())
         run_config['calibration']={'passed':value['passed'],'execution_allowed':gate_allows_execution(value),
-            'status':value.get('calibration',{}).get('status'),'gate':str(gate)}
+            'status':value.get('calibration',{}).get('status'),'gate':str(gate),
+            'score_provisional':value.get('calibration',{}).get('score_provisional',False)}
         write(args.output/'run-config.json',run_config)
     with tempfile.TemporaryDirectory(prefix='input-',dir=args.cache) as temp:
         root=materialize(row,Path(temp)/'task')

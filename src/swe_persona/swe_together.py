@@ -59,14 +59,20 @@ def execute(root,row,config,out,mode,gate=None):
         print(json.dumps({'task_id':row['task_id'],'profile':PROFILE,'status':'pass','backend':'harbor-docker','binding_sha256':binding['binding_sha256']}));return 0
     if mode=='calibrate':
         from swe_together_pilot.persona_runtime.calibrate import calibrate
-        return 0 if asyncio.run(calibrate(config,out))['passed'] else 1
-    if gate is None or not json.loads((gate/'gate.json').read_text()).get('passed'):raise ValueError('Passed unified calibration required')
+        return 0 if asyncio.run(calibrate(config,out))['execution_allowed'] else 1
+    from .cli import gate_allows_execution
+    if gate is None or not gate_allows_execution(json.loads((gate/'gate.json').read_text())):
+        raise ValueError('Approved unified calibration required')
     calibration=json.loads((gate/'calibration.json').read_text())
+    from swe_together_pilot.persona_runtime.calibration_policy import calibration_allowed
+    if not calibration_allowed(calibration):raise ValueError('Incomplete or inconsistent calibration report')
     if binding['binding_sha256'] not in calibration.get('binding_sha256s',[]):raise ValueError('Binding not covered by calibration')
     result=asyncio.run(episode(binding,task,config,out/'episode',row['environment']['agent']['image'],
         seconds=row['budget']['episode_timeout_sec'],max_steps=json.loads(row['interaction']['config_json'])['max_agent_steps'],
         verifier_seconds=row['budget']['verifier_timeout_sec']))
-    result['calibration']={'passed':True,'controls':calibration['controls'],'report':str(gate/'calibration.json')}
+    result['calibration']={k:calibration[k] for k in ('passed','status','execution_allowed','score_provisional','policy','mode')}
+    result['calibration'].update(controls=calibration['controls'],report=str(gate/'calibration.json'))
+    result['score_provisional']=calibration['score_provisional']
     # Calibration is attached as a scoped control result, not global judge accuracy.
     write(out/'persona-result.json',result)
     return 0 if result['benchmark_outcome'] in {'pass','fail'} else 2

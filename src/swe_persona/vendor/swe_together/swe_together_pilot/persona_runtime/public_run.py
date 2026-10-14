@@ -95,8 +95,10 @@ class InteractionStall:
 
 def runtime_hash():
     h=hashlib.sha256()
-    for p in sorted(Path(__file__).parent.iterdir()):
-        if p.is_file() and p.suffix in {'.py','.json'}:h.update(p.name.encode()+b'\0'+p.read_bytes())
+    root=Path(__file__).parent
+    for p in sorted(root.rglob('*')):
+        if p.is_file() and '__pycache__' not in p.parts:
+            h.update(p.relative_to(root).as_posix().encode()+b'\0'+p.read_bytes())
     for p in sorted((PILOT/'full109/bindings').glob('*.json')):h.update(p.name.encode()+b'\0'+p.read_bytes())
     return h.hexdigest()
 
@@ -392,7 +394,10 @@ def main(argv=None):
     p.add_argument('--max-steps',type=int,default=200)
     a=p.parse_args(argv);config=load_config(a.config,require_keys=True);binding=json.loads(a.binding.read_text())
     gate=json.loads(a.calibration.read_text())
-    if not gate.get('passed') or gate.get('runtime_sha256')!=runtime_hash() or gate.get('api_config_sha256')!=fingerprint(config):raise ValueError('A passed calibration for the exact API configuration and runtime is required')
+    from .calibration_policy import calibration_allowed, mode
+    if (not calibration_allowed(gate) or gate.get('mode')!=mode()
+            or gate.get('runtime_sha256')!=runtime_hash() or gate.get('api_config_sha256')!=fingerprint(config)):
+        raise ValueError('An approved calibration for the exact API configuration and runtime is required')
     if binding['binding_sha256'] not in gate.get('binding_sha256s',[]):raise ValueError('Binding was not covered by calibration')
     result=asyncio.run(episode(binding,PILOT/'SWE-Together/tasks'/binding['task_id'],config,a.output,a.image,a.seconds,a.max_steps))
     print(json.dumps(result,indent=2));return 0 if result['benchmark_outcome'] in {'pass','fail'} else 2
