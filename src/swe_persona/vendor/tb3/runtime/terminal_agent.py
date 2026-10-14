@@ -304,7 +304,10 @@ class PersonaTerminalAgent(BaseAgent):
         return self.terminal=='running'
 
     async def run(self,instruction,environment,context):
-        self.start=time.monotonic();self.terminal='running';self.confirm_each=False;self.plan_first=False
+        from swe_persona.time_limit import begin_interaction
+        self.start=time.monotonic()
+        self.limit=min(self.limit,begin_interaction(self.limit)-self.start)
+        self.terminal='running';self.confirm_each=False;self.plan_first=False
         self.interactive=self.arm in {'persona','persona_static','vague_no_evolution'}
         if self.interactive:
             if self.arm=='vague_no_evolution':
@@ -394,3 +397,5 @@ class PersonaTerminalAgent(BaseAgent):
             try:await watchdog
             except asyncio.CancelledError:pass
             self.save();context.metadata={'arm':self.arm,'terminal':self.terminal,'clock':'agent_user_wall','deadline_exceeded':self.expired}
+            from swe_persona.time_limit import begin_verification
+            begin_verification()

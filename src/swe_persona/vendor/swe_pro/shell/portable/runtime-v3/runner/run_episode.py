@@ -681,6 +681,7 @@ def main() -> int:
     finalization_started = False
     finalization_complete = False
     api_interrupted = False
+    from swe_persona.time_limit import InteractionExpired, arm_interaction, disarm_interaction
     api_recovery_assessment = None
     turn = 1
 
@@ -689,6 +690,8 @@ def main() -> int:
         nonlocal complete_contract_message_ids, agent_turns_used, disclosed_evolved
         nonlocal artifacts_ready, finalization_started, finalization_complete
         finalization_started = True
+        from swe_persona.time_limit import begin_verification
+        begin_verification()
         agent_turns_used = turn
         final_image, final_digest, _changed = controller.snapshot(container, 99)
         artifacts_ready = True
@@ -764,6 +767,11 @@ def main() -> int:
         if container.file_list():
             raise RuntimeError("selected SWE-bench Pro image did not start from a clean git status")
         public_go_tests = public_base_go_tests(container, manifest.base_commit)
+
+        from swe_persona.time_limit import begin_interaction
+        # The unified row cap is enforced by the host interaction watchdog.
+        interaction_deadline=begin_interaction(float(os.environ.get('SWE_PERSONA_INTERACTION_SECONDS','86400')))
+        arm_interaction(interaction_deadline)
 
         persona = load_persona(args.persona)
         task_binding = simulator_task_binding(manifest, selected, controller.max_turns, native_tracker)
@@ -994,17 +1002,18 @@ def main() -> int:
             turn += 1
 
         finalize()
-    except Exception as exc:
+    except (Exception, InteractionExpired) as exc:
         from swe_persona.api_recovery import is_api_interruption
         api_interrupted = is_api_interruption(exc)
         error = traceback.format_exc()
         print(error, flush=True)
-        if api_interrupted and started_container and not finalization_started:
+        if (api_interrupted or isinstance(exc,InteractionExpired)) and started_container and not finalization_started:
             try:
                 finalize()
             except Exception:
                 error += '\nFinal verification failed:\n' + traceback.format_exc()
     finally:
+        disarm_interaction()
         if started_container and not args.keep_container:
             container.remove()
 

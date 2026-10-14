@@ -336,6 +336,8 @@ class Episode:
             with self.timing.measure("setup"):
                 self.agent.start()
             self.budget.start()
+            from swe_persona.time_limit import begin_interaction
+            self.budget.timeout_sec=min(self.budget.timeout_sec,begin_interaction(self.budget.timeout_sec)-self.budget.clock())
             run = self._single_turn() if self.condition == "single_turn" else self._loop()
             with self.timing.measure("agent_quiesce"):
                 quiesce = self.agent.quiesce()
@@ -350,6 +352,8 @@ class Episode:
             # The timed episode ends at the frozen snapshot, before teardown.
             budget_used = self.budget.to_json()
             expired = self.budget.remaining() <= 0
+            from swe_persona.time_limit import begin_verification
+            begin_verification()
             try:
                 self.agent.stop()
             except Exception as exc:  # noqa: BLE001
