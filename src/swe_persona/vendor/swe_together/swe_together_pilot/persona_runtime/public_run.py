@@ -56,6 +56,39 @@ def write(path,value):
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(value,indent=2,ensure_ascii=False)+'\n')
 
+async def agent_command(env, command, workdir, limit):
+    """Normalize Harbor 0.23's command timeout without hiding other failures."""
+    try:
+        r = await env.exec(command, cwd=workdir, timeout_sec=limit)
+    except (asyncio.TimeoutError, RuntimeError) as exc:
+        if not isinstance(exc, asyncio.TimeoutError) and str(exc) != f'Command timed out after {limit} seconds':
+            raise
+        return 124, ('Host command timeout. Output unavailable; the container command may still be running. '
+                     'Inspect its state before retrying.'), True
+    return r.return_code, (r.stdout or '') + '\n' + (r.stderr or ''), False
+
+
+class InteractionStall:
+    """Bound silent message-only loops; this is not a task-completion judgment."""
+    threshold = 4
+
+    def __init__(self):
+        self.key = None
+        self.turns = []
+
+    def observe(self, decision, evidence, command_count, turn):
+        key = (evidence['snapshot_sha256'], command_count)
+        if decision['action'] != 'no-op' or decision.get('kind') != 'wait':
+            self.key = None
+            self.turns = []
+            return False
+        if key != self.key:
+            self.turns = []
+        self.key = key
+        self.turns.append(turn)
+        return len(self.turns) >= self.threshold
+
+
 def runtime_hash():
     h=hashlib.sha256()
     for p in sorted(Path(__file__).parent.iterdir()):
@@ -170,6 +203,7 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
         sim.history=[{'ref':'user-0','role':'user','turn':0,'text':initial}]
         conversation=[{'role':'system','content':AGENT_PROMPT},{'role':'user','content':initial}]
         executions=[];turn=0;commands_since_message=0;stop='step_limit'
+        stall=InteractionStall()
         async def evidence():
             r=await env.exec('python3 -c '+shlex.quote(collector),cwd=workdir,timeout_sec=30)
             if r.return_code:raise RuntimeError('Evidence collection failed: '+str(r.stderr)[-500:])
@@ -200,9 +234,7 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
             if action['action']=='command':
                 before=await evidence()
                 limit=max(1,min(180,math.ceil(deadline-time.monotonic())))
-                timed=False
-                try:r=await env.exec(action['content'],cwd=workdir,timeout_sec=limit);rc=r.return_code;output=(r.stdout or '')+'\n'+(r.stderr or '')
-                except asyncio.TimeoutError:timed=True;rc=124;output='Host command timeout.'
+                rc,output,timed=await agent_command(env,action['content'],workdir,limit)
                 after=await evidence()
                 version=after['snapshot_sha256'] if before['snapshot_sha256']==after['snapshot_sha256'] else None
                 executions.append({'ref':f'host-command-{step}','command':action['content'],'returncode':rc,'timed_out':timed,
@@ -235,12 +267,30 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
                 result['simulator_unavailable']=stop=='simulator_unavailable'
                 break
             if decision['action']=='accept' and sim.user_accepted:stop='user_accepted';break
+            if stall.observe(decision,ev,len(executions),turn):
+                stop='interaction_stalled'
+                write(out/'stall-evidence.json',{
+                    'policy':'silent-no-progress-v1','threshold':stall.threshold,
+                    'turns':stall.turns,'snapshot_sha256':ev['snapshot_sha256'],
+                    'command_count':len(executions),
+                    'reason':'Consecutive simulator wait decisions with no commands or workspace changes.',
+                    'grading':'Unscored interruption; not a task pass/fail.'})
+                break
             conversation.append({'role':'user','content':decision['content'] if decision['action']=='message' else '[The user is temporarily silent. Continue the authorized task.]'})
         coding_elapsed=seconds-max(0,deadline-time.monotonic())
         # Finalization and native verification are explicitly outside coding time.
         calls.deadline=time.monotonic()+180
         ev=await evidence();write(out/'persona-evidence.json',ev)
         final_artifacts_ready=True
+        if stop=='interaction_stalled':
+            # Preserve evidence and clean up without spending on final judges or
+            # presenting incomplete work as a scored coding failure.
+            write(out/'transcript.json',sim.history)
+            result.update(benchmark_outcome='invalid',stop_reason=stop,
+                interaction_stalled=True,persona_status='unknown',
+                persona_check={'status':'unknown'},user_accepted=False,
+                elapsed_coding_sec=coding_elapsed)
+            return result
         try:summary=await asyncio.wait_for(sim.finish(ev),180)
         except Exception as exc:
             if not is_api_interruption(exc):raise
