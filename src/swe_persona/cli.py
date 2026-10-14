@@ -135,7 +135,7 @@ def normalize_result(row,out,rc):
     recovery=None
     coverage=None;coverage_error=None
     if matches:
-        recovery=d.get('api_recovery_assessment')
+        recovery=d.get('api_recovery_assessment') or d.get('interaction_stall_assessment')
         if recovery is None and isinstance(d.get('benchmark_outcome'),dict):
             candidate=d['benchmark_outcome']
             if candidate.get('api_interrupted') or candidate.get('online_judge_unavailable'):recovery=candidate
@@ -171,8 +171,10 @@ def normalize_result(row,out,rc):
     if recovery is not None:
         result.update(verification_complete=recovery['verification_complete'],
                       outcome_reason=recovery.get('outcome_reason','api_interrupted'))
-        result['online_judge_assessment' if recovery.get('online_judge_unavailable') else
-               'api_recovery_assessment']=recovery
+        assessment_name=('interaction_stall_assessment' if recovery.get('interaction_stalled') else
+                         'online_judge_assessment' if recovery.get('online_judge_unavailable') else
+                         'api_recovery_assessment')
+        result[assessment_name]=recovery
     if coverage is not None:
         result['persona_requirement_coverage']=coverage
     if coverage_error:
@@ -185,7 +187,8 @@ def normalize_result(row,out,rc):
                       episode_started=diagnostic['episode_started'],error=diagnostic['error'])
         result['details'].append('preflight-error.json')
     elif matches:
-        for field in ('error','final_error','error_category','end_reason','simulator_message_recoveries'):
+        for field in ('error','final_error','error_category','end_reason','simulator_message_recoveries',
+                      'stop_reason','interaction_stalled','interaction_stall_policy'):
             if d.get(field) is not None:result[field]=d[field]
     write(out/'result.json',result)
     return result
