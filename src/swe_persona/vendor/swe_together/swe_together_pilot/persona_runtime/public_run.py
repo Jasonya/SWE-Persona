@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import json
 import math
+import os
 import shlex
 import time
 import tomllib
@@ -69,16 +70,19 @@ async def agent_command(env, command, workdir, limit):
 
 
 class InteractionStall:
-    """Bound silent message-only loops; this is not a task-completion judgment."""
-    threshold = 4
+    """Bound silent message-only loops; final verification still grades the work."""
+    policy = 'silent-no-progress-v2'
 
-    def __init__(self):
+    def __init__(self, threshold=4):
+        if isinstance(threshold, bool) or not isinstance(threshold, int) or threshold < 0:
+            raise ValueError('Interaction stall threshold must be a nonnegative integer')
+        self.threshold = threshold
         self.key = None
         self.turns = []
 
-    def observe(self, decision, evidence, command_count, turn):
+    def observe(self, decision, evidence, command_count, turn, *, pending_disclosures=False):
         key = (evidence['snapshot_sha256'], command_count)
-        if decision['action'] != 'no-op' or decision.get('kind') != 'wait':
+        if pending_disclosures or not self.threshold or decision['action'] != 'no-op' or decision.get('kind') != 'wait':
             self.key = None
             self.turns = []
             return False
@@ -153,6 +157,7 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
     from harbor.environments.docker.docker import DockerEnvironment
     from harbor.models.task.config import EnvironmentConfig,NetworkMode,NetworkPolicy
     from harbor.models.trial.paths import TrialPaths
+    stall=InteractionStall(int(os.environ.get('SWE_PERSONA_TOGETHER_STALL_TURNS','4')))
     validate(binding)
     if binding['original_instruction']!=(task/'instruction.md').read_text() or binding['original_user_context']!=(task/'user_simulation_prompt.md').read_text():
         raise ValueError('Binding does not match task inputs')
@@ -181,7 +186,9 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
     result={'profile':PROFILE,'task_id':binding['task_id'],'persona_id':binding['persona']['id'],
         'binding_sha256':binding['binding_sha256'],'runtime_sha256':runtime_hash(),
         'api_config_sha256':fingerprint(config),'docker_image_id':image_id,'original_reward':None,
-        'benchmark_outcome':'infrastructure_error','persona_check':{},'cpu_only':True}
+        'benchmark_outcome':'infrastructure_error','persona_check':{},'cpu_only':True,
+        'interaction_stall_policy':{'policy':stall.policy,'threshold':stall.threshold,
+                                   'enabled':bool(stall.threshold)}}
     final_artifacts_ready=False
     try:
         await asyncio.wait_for(env.start(force_build=False),timeout=600)
@@ -203,7 +210,6 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
         sim.history=[{'ref':'user-0','role':'user','turn':0,'text':initial}]
         conversation=[{'role':'system','content':AGENT_PROMPT},{'role':'user','content':initial}]
         executions=[];turn=0;commands_since_message=0;stop='step_limit'
-        stall=InteractionStall()
         async def evidence():
             r=await env.exec('python3 -c '+shlex.quote(collector),cwd=workdir,timeout_sec=30)
             if r.return_code:raise RuntimeError('Evidence collection failed: '+str(r.stderr)[-500:])
@@ -267,30 +273,29 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
                 result['simulator_unavailable']=stop=='simulator_unavailable'
                 break
             if decision['action']=='accept' and sim.user_accepted:stop='user_accepted';break
-            if stall.observe(decision,ev,len(executions),turn):
+            pending_disclosures=(any(r['id'] not in sim.disclosed
+                for r in binding['persona'].get('bound_evolved_requirements',[])) or
+                any(r['id'] not in sim.native_disclosed
+                    for r in binding.get('native_phase_contract',{}).get('required_followups',[])))
+            if stall.observe(decision,ev,len(executions),turn,pending_disclosures=pending_disclosures):
                 stop='interaction_stalled'
+                result['interaction_stalled']=True
                 write(out/'stall-evidence.json',{
-                    'policy':'silent-no-progress-v1','threshold':stall.threshold,
+                    'policy':stall.policy,'threshold':stall.threshold,
                     'turns':stall.turns,'snapshot_sha256':ev['snapshot_sha256'],
                     'command_count':len(executions),
                     'reason':'Consecutive simulator wait decisions with no commands or workspace changes.',
-                    'grading':'Unscored interruption; not a task pass/fail.'})
+                    'grading':'Preserve work and run independent final native/persona verification.'})
                 break
             conversation.append({'role':'user','content':decision['content'] if decision['action']=='message' else '[The user is temporarily silent. Continue the authorized task.]'})
         coding_elapsed=seconds-max(0,deadline-time.monotonic())
         # Finalization and native verification are explicitly outside coding time.
         calls.deadline=time.monotonic()+180
         ev=await evidence();write(out/'persona-evidence.json',ev)
+        write(out/'transcript.json',sim.history)
+        write(out/'executions.json',executions)
         final_artifacts_ready=True
-        if stop=='interaction_stalled':
-            # Preserve evidence and clean up without spending on final judges or
-            # presenting incomplete work as a scored coding failure.
-            write(out/'transcript.json',sim.history)
-            result.update(benchmark_outcome='invalid',stop_reason=stop,
-                interaction_stalled=True,persona_status='unknown',
-                persona_check={'status':'unknown'},user_accepted=False,
-                elapsed_coding_sec=coding_elapsed)
-            return result
+        result.update(stop_reason=stop,elapsed_coding_sec=coding_elapsed)
         try:summary=await asyncio.wait_for(sim.finish(ev),180)
         except Exception as exc:
             if not is_api_interruption(exc):raise
@@ -298,6 +303,9 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
             summary={'persona_status':'unknown','evaluation_valid':False,'requirements':[],
                      'user_accepted':sim.user_accepted,'error_type':type(exc).__name__}
         write(out/'persona-summary.json',summary);write(out/'transcript.json',sim.history)
+        met=summary['persona_status']=='met';valid=summary['evaluation_valid']
+        result.update(persona_check={'status':'pass' if met else 'fail' if summary['persona_status']=='not_met' else 'unknown'},
+                      persona_status=summary['persona_status'],user_accepted=summary['user_accepted'])
         # Stop the agent and its background processes. Grade a snapshot in a
         # fresh container with read-only protected tests, never in the live sandbox.
         def verify_snapshot():
@@ -329,9 +337,8 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
                 client.close()
         reward=await asyncio.to_thread(verify_snapshot)
         result['original_reward']=reward
-        met=summary['persona_status']=='met';valid=summary['evaluation_valid']
         status='pass' if reward==1 and met and valid else 'invalid' if not valid else 'fail'
-        if result.get('api_interrupted') or result.get('online_judge_unavailable') or any(r.get('api_interrupted') for r in summary.get('requirements',[])):
+        if result.get('interaction_stalled') or result.get('api_interrupted') or result.get('online_judge_unavailable') or any(r.get('api_interrupted') for r in summary.get('requirements',[])):
             progress = any(item.get('role') == 'agent' and item.get('text','').strip() for item in sim.history)
             progress = progress or any(item.get('ref') != 'host:execution_index' and
                 item.get('text','').strip() not in ('','(no changes)') for item in ev['artifacts'])
@@ -348,7 +355,14 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
             if result.get('online_judge_unavailable'):
                 assessment.update(api_interrupted=False,online_judge_unavailable=True,
                     outcome_reason='online_judge_unavailable',policy='registered-refs-internal-recovery-v2')
-            status=assessment['status'];result['api_recovery_assessment']=assessment
+            if result.get('interaction_stalled'):
+                assessment.update(api_interrupted=bool(result.get('api_interrupted')) or
+                    any(r.get('api_interrupted') for r in summary.get('requirements',[])),
+                    interaction_stalled=True,outcome_reason=stop,policy=stall.policy)
+                result['interaction_stall_assessment']=assessment
+            status=assessment['status']
+            if assessment.get('api_interrupted') or result.get('online_judge_unavailable'):
+                result['api_recovery_assessment']=assessment
         result.update(original_reward=reward,benchmark_outcome=status,stop_reason=stop,
             persona_check={'status':'pass' if met else 'fail' if summary['persona_status']=='not_met' else 'unknown'},
             persona_status=summary['persona_status'],user_accepted=summary['user_accepted'],
