@@ -3,6 +3,7 @@ import bootstrap_adapter
 from bootstrap_adapter import HERE
 import argparse
 import json
+import os
 from pathlib import Path
 import uuid
 from agent import TerminalAgent
@@ -36,6 +37,7 @@ def judge(llm, req, persona, public, messages, turn, audit, prompt, rubric, fina
 
 
 def main(argv=None):
+    from execution_policy import BudgetExpired
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--task',type=Path,required=True); p.add_argument('--persona',required=True)
     p.add_argument('--gold-dir',type=Path,required=True); p.add_argument('--binding-dir',type=Path,required=True)
@@ -53,7 +55,10 @@ def main(argv=None):
     req=read(bound/'evolved_requirements.json')['requirements'][0]
     if persona['id']!=a.persona or read(bound/'build-identity.json')['source_task_sha256']!=task.task_sha256:
         raise ValueError('Task/persona binding identity mismatch')
-    deadline=Deadline(a.sample_seconds,'sample',a.deadline_monotonic)
+    from swe_persona.time_limit import managed_clock, begin_interaction, begin_verification
+    managed=managed_clock()
+    # Fit assessment and container startup belong to preparation, not interaction.
+    deadline=Deadline(float(os.environ.get('SWE_PERSONA_PREPARATION_TIMEOUT_SEC',7200)), 'preparation') if managed else Deadline(a.sample_seconds,'sample',a.deadline_monotonic)
     llm=BudgetClient(Llm(model=a.model,call_log=CallLog(path=private/'audit/llm_calls.jsonl')),90); llm.deadline=deadline
     public=task.public_view(); messages=[]; decisions=[]; runtime=None; met=False; satisfied=False; result=None
     judge_prompt=(bound/'closed_loop/judge_prompt.md').read_text(encoding='utf-8')
@@ -74,9 +79,17 @@ def main(argv=None):
     def finalize():
         nonlocal runtime,result,final_item,finalization_started
         finalization_started=True
+        if managed:
+            review_deadline=begin_verification()
+            llm.deadline=Deadline(0,'verification',review_deadline)
+            runtime.deadline=llm.deadline
         checkpoint()
         _,_,final_item=snapshots.capture(99); runtime.remove(); runtime=None
-        verifier=Checkers(snapshots,llm,run,task); verifier.protect_official_tests=True; verifier.review_deadline=deadline
+        verifier=Checkers(snapshots,llm,run,task); verifier.protect_official_tests=True; verifier.review_deadline=llm.deadline
+        if managed:
+            native_seconds=float(os.environ.get('SWE_PERSONA_NATIVE_VERIFICATION_SECONDS',a.sample_seconds))
+            verifier.review_deadline=Deadline(native_seconds,'native_verification')
+            verifier.review_deadline.expires=min(verifier.review_deadline.expires,llm.deadline.expires)
         status,reason,evidence=verifier.official(final_item['patch'])
         original=None if status=='unknown' else int(status=='pass')
         check=checker(req,eligible(messages,2)); save(run/'persona-check.json',{'checks':[check],'independent':True})
@@ -105,6 +118,9 @@ def main(argv=None):
         runtime.start(); rc,head,_=runtime.sh('git rev-parse HEAD',timeout=15)
         if rc or head.strip()!=task.base_commit: raise ValueError('Image base commit mismatch')
         snapshots=Snapshots(runtime,task,run)
+        if managed:
+            deadline=Deadline(a.sample_seconds,'sample',begin_interaction(a.sample_seconds))
+            llm.deadline=deadline;runtime.deadline=deadline
         agent=TerminalAgent(llm,runtime,json.dumps(task.environment),max_steps_per_turn=14,workdir='/testbed',command_timeout=900)
         message=(a.binding_dir/'instruction.md').read_text(encoding='utf-8')
         senior=a.persona=='senior_race_review_no_tutorial'
@@ -150,7 +166,8 @@ def main(argv=None):
         from swe_persona.api_recovery import assess_interrupted,is_api_interruption
         checkpoint()
         api_interrupted=is_api_interruption(error)
-        if api_interrupted and snapshots is not None and not finalization_started:
+        budget_expired=isinstance(error, BudgetExpired) and deadline.phase=='sample' and not finalization_started
+        if (api_interrupted or budget_expired) and snapshots is not None and not finalization_started:
             try:finalize()
             except Exception as final_error:
                 save(run/'final-verification-error.json',{'error_type':type(final_error).__name__})
@@ -159,6 +176,8 @@ def main(argv=None):
                 'online_requirements':decisions,'objective_requirements':[], 'benchmark_outcome':'infrastructure_error',
                 'experience_status':'not_executed_optional'}
         result.update(error_type=type(error).__name__,error=str(error)[:1000])
+        if budget_expired:
+            result.update(benchmark_outcome='fail',termination='interaction_timeout')
         if api_interrupted:
             states=[item.get('verdict') for item in result.get('objective_requirements',[])]
             persona_grade=False if 'fail' in states else True if states and all(v=='pass' for v in states) else None

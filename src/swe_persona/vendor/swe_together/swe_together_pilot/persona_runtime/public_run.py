@@ -206,7 +206,8 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
             write(out/'dependency-setup.json',{'returncode':setup.return_code,'stdout':setup.stdout,'stderr':setup.stderr})
             if setup.return_code:raise RuntimeError('Pinned offline dependencies could not be installed')
             await env.exec('rm -rf /tmp/swt-verifier-deps',cwd=workdir,timeout_sec=10)
-        deadline=time.monotonic()+seconds;calls=Calls(config,out,deadline)
+        from swe_persona.time_limit import begin_interaction, begin_verification
+        deadline=begin_interaction(seconds);seconds=deadline-time.monotonic();calls=Calls(config,out,deadline)
         sim=UserSimulator(binding,calls)
         initial=binding['original_instruction'].rstrip()+'\n\n'+initial_persona_message(binding['persona'])
         sim.history=[{'ref':'user-0','role':'user','turn':0,'text':initial}]
@@ -292,6 +293,7 @@ async def episode(binding,task,config,out,image,seconds=1800,max_steps=200,verif
             conversation.append({'role':'user','content':decision['content'] if decision['action']=='message' else '[The user is temporarily silent. Continue the authorized task.]'})
         coding_elapsed=seconds-max(0,deadline-time.monotonic())
         # Finalization and native verification are explicitly outside coding time.
+        begin_verification()
         calls.deadline=time.monotonic()+180
         ev=await evidence();write(out/'persona-evidence.json',ev)
         write(out/'transcript.json',sim.history)

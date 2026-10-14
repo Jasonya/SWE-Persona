@@ -15,7 +15,7 @@ from . import __version__
 from .api import load_config, fingerprint
 from .dataset import rows, load_task, materialize, write, VENDOR
 from .schema import PROFILES
-from .time_limit import resolve_limit, run_bounded, positive_seconds
+from .time_limit import resolve_limit, run_bounded, positive_seconds, apply_timeout_result
 
 def runtime_hash():
     h=hashlib.sha256()
@@ -29,13 +29,18 @@ def worker(root,mode,output,config=None,gate=None,time_limit=None):
     if config:command+=['--config',str(Path(config).resolve())]
     if gate:command+=['--gate-dir',str(gate)]
     env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1')
+    if time_limit and 'internal_budget' in time_limit:
+        env['SWE_PERSONA_NATIVE_VERIFICATION_SECONDS']=str(time_limit['internal_budget']['verifier_timeout_sec'])
     env['PYTHONPATH']=str(Path(__file__).parents[1])+os.pathsep+env.get('PYTHONPATH','')
     Path(output).mkdir(parents=True,exist_ok=True)
     with (Path(output)/(mode+'.log')).open('w') as log:
         try:
             if time_limit is None:
                 return subprocess.run(command,env=env,stdout=log,stderr=subprocess.STDOUT).returncode
-            receipt=run_bounded(command,env=env,log=log,seconds=time_limit['effective_sec'])
+            receipt=run_bounded(command,env=env,log=log,seconds=time_limit['effective_sec'],
+                phase_file=Path(output)/'evaluation-clock.json',
+                preparation_sec=time_limit.get('preparation_sec',7200),
+                verification_sec=time_limit.get('verification_sec',1800))
             write(Path(output)/'time-limit.json',dict(time_limit,**{'execution':receipt}))
             return receipt['process_exit_code']
         finally:
@@ -227,7 +232,7 @@ def main():
     run.add_argument('--output',type=Path,required=True);run.add_argument('--dry-run',action='store_true')
     run.add_argument('--cache',type=Path,default=Path.home()/'.cache/swe-persona')
     run.add_argument('--timeout-sec','--total-timeout-sec',dest='timeout_sec',type=positive_seconds,
-        help='Total worker wall-clock seconds for every profile; default: row budget.episode_timeout_sec. Includes setup and grading; existing inner limits remain in force.')
+        help='Agent/user interaction wall-clock seconds; default: row budget.episode_timeout_sec. Excludes preparation, native preflight and final grading; existing inner limits remain in force.')
     args=ap.parse_args()
     if args.command=='list':
         table=pq.read_table(args.dataset,columns=['task_id','source_benchmark','source_subset'])
@@ -292,10 +297,7 @@ def main():
     result=normalize_result(row,args.output,rc)
     receipt=json.loads((args.output/'time-limit.json').read_text())
     result['time_limit']=receipt
-    if receipt['execution']['timed_out']:
-        result.update(status='fail',joint_success=False,outcome_reason='total_timeout',
-                      verification_complete=False,score=0.0,
-                      note='Total wall-clock budget exhausted. Unexecuted grading is not synthesized; partial diagnostics are retained.')
+    apply_timeout_result(result,receipt['execution'])
     write(args.output/'result.json',result)
     print(json.dumps(result,indent=2))
     return 0 if result['status'] in {'pass','fail'} else 2

@@ -37,6 +37,8 @@ def supervise_sample(command, directory, seconds, cleanup=cleanup_sample):
     An interrupted attempt remains evidence; resuming never overwrites it.
     """
     directory = Path(directory)
+    from swe_persona.time_limit import managed_clock, PHASE_ENV, POLICY
+    managed=managed_clock()
     if not math.isfinite(seconds) or seconds <= 0:
         raise ValueError("A finite positive sample cap is required")
     directory.mkdir(parents=True, exist_ok=False)
@@ -45,17 +47,22 @@ def supervise_sample(command, directory, seconds, cleanup=cleanup_sample):
     started = time.monotonic()
     deadline = started + seconds
     save(directory / "started.json", {"owner": owner, "cap_seconds": seconds,
-         "started_unix": time.time(), "deadline_monotonic": deadline})
+         "started_unix": time.time(), "deadline_monotonic": None if managed else deadline,
+         "timing_policy": POLICY if managed else 'legacy-whole-sample'})
     options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
                if os.name == "nt" else {"start_new_session": True})
     process, code, timed_out, interrupted, error = None, None, False, False, None
     try:
         with (directory / "worker.log").open("w", encoding="utf-8") as log:
-            process = subprocess.Popen(command + ["--sample-seconds", str(seconds),
-                "--deadline-monotonic", str(deadline), "--output-dir", str(directory / "worker")],
+            arguments=["--sample-seconds",str(seconds),"--output-dir",str(directory / "worker")]
+            if not managed:arguments += ["--deadline-monotonic",str(deadline)]
+            process = subprocess.Popen(command + arguments,
                 env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, **options)
-            code = process.wait(timeout=max(.001, deadline - time.monotonic()))
-            timed_out = code == 124 or time.monotonic() > deadline
+            # In the unified runner, the host watchdog owns separate preparation,
+            # interaction and grading clocks. Do not start a second full-sample
+            # timer before the episode container has finished preparation.
+            code = process.wait(timeout=None if managed else max(.001, deadline - time.monotonic()))
+            timed_out = code == 124 or (not managed and time.monotonic() > deadline)
     except subprocess.TimeoutExpired:
         timed_out = True
     except (KeyboardInterrupt, SystemExit):
@@ -96,6 +103,14 @@ def supervise_sample(command, directory, seconds, cleanup=cleanup_sample):
             "persona_status": episode.get("outcome", {}).get("evolved_requirements", []),
             "worker_release": release,
             "publication_status": "awaiting_human_review" if status in ("completed", "timeout") else "blocked"}
+        if managed:
+            receipt['timing_policy']=POLICY
+            receipt['phase_events']=read(Path(os.environ[PHASE_ENV]))['events']
+            phases=receipt['phase_events']
+            receipt['interaction_timed_out']=bool(len(phases)>1 and
+                phases[1]['started_monotonic']>phases[0]['deadline_monotonic'])
+            receipt['completion_within_budget']=status=='completed' and not receipt['interaction_timed_out']
+            receipt['seconds_scope']='sample worker including preparation and grading; cap_seconds limits interaction only'
         save(directory / "result.json", receipt)
     if (error and error.startswith("process_cleanup:")) or cleanup_error:
         raise RuntimeError("Owned sample cleanup failed; stop the batch before starting another job")

@@ -251,7 +251,7 @@ Optional batch selectors are `--source-benchmark "SWE-bench Pro"`, `--profile sw
 
 ## 6. Time budgets
 
-All profiles expose the same total-time override:
+All profiles expose the same agent/user interaction time override:
 
 ```bash
 swe-persona run \
@@ -266,7 +266,7 @@ python scripts/evaluate.py \
 
 `--timeout-sec` and `--total-timeout-sec` are aliases and require a positive finite value. Omit them to retain each row's `budget.episode_timeout_sec`:
 
-| Source | Lite default total limits |
+| Source | Lite default interaction limits |
 | --- | --- |
 | Terminal-Bench 3.0 | 2,500–28,800 seconds |
 | SWE-bench Pro | 3,600 seconds |
@@ -274,9 +274,11 @@ python scripts/evaluate.py \
 | SWE-Together | 1,800 seconds |
 | DeepSWE | 3,600 seconds |
 
-The common `worker-wall-clock-v1` limit includes worker startup, image/environment preparation, native preflight, agent and simulator work, judges, and final verification. Prior calibration and input materialization are outside this clock. Existing profile-specific coding, turn, action and verification limits still apply; increasing the outer cap does not disable them. Cleanup receives a bounded grace period outside the scoring budget.
+The common `agent-user-wall-clock-v2` budget starts when the task environment and preflight are ready for formal interaction. It covers agent and simulated-user calls, online judges, tools, and interaction snapshots. Worker startup, image download/build, container/environment preparation, native reference preflight, prior calibration, input materialization, and final independent verification do **not** consume this budget. The legacy `--total-timeout-sec` alias also sets the interaction cap, not a preparation-plus-interaction cap. Existing profile-specific coding, turn, action, and native verification limits still apply; increasing the override does not disable them.
 
-A total timeout is recorded as `status: "fail"`, `outcome_reason: "total_timeout"` and zero joint credit. Missing native/persona grades remain unknown. Compare runs under the same budget policy and record overrides; do not silently extend short defaults to obtain a better score.
+Host controllers publish one interaction deadline after preparation; watchdogs and nested SWE-Live workers use this deadline instead of restarting the same duration at different stages. Preparation has a separate 7,200-second infrastructure watchdog. Final verification has its own watchdog, defaulting to `max(900, budget.verifier_timeout_sec + 600)` seconds; the original native verifier's own limit remains unchanged. Set `SWE_PERSONA_PREPARATION_TIMEOUT_SEC` or `SWE_PERSONA_VERIFICATION_TIMEOUT_SEC` to positive finite values to configure these infrastructure limits. `time-limit.json` records phase events and separate preparation, interaction, and verification elapsed times. A bounded transition/cleanup grace grants no extra interaction credit.
+
+An interaction timeout is recorded as `status: "fail"`, `outcome_reason: "total_timeout"` and zero joint credit. Available independent native/persona grades are retained; missing grades remain unknown. A preparation or final-verification watchdog timeout is `infrastructure_error`, with `preparation_timeout` or `verification_timeout`, rather than a coding failure. This policy changes the effective interaction allowance relative to `worker-wall-clock-v1`; use fresh calibration and new output directories, retain historical attempts, and compare runs under the same policy and overrides.
 
 ### API timeout recovery across all subsets
 

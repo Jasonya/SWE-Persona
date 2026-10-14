@@ -376,6 +376,8 @@ def episode(run_id, arm, client_factory=Client, *, box_factory=None, backend_fac
             source=collect_baseline_source(box); dump(out/'initial-snapshot.json',initial)
             (out/'baseline-source.json').write_text(source)
             timings['setup_seconds']=time.monotonic()-setup_start
+            from swe_persona.time_limit import begin_interaction, begin_verification
+            client.deadline=begin_interaction(budgets['interaction_seconds'])
             try:
                 opening_start=time.monotonic()
                 try:
@@ -528,6 +530,7 @@ def episode(run_id, arm, client_factory=Client, *, box_factory=None, backend_fac
                 reason=reason or 'user_turn_budget_exhausted'
             finally:
                 interaction_end=time.monotonic()
+                begin_verification()
                 snapshot=snapshot_now(box); dump(out/'recovery-snapshot.json',snapshot)
     except Exception as exc:
         if isinstance(exc,(JudgeOutputError,requirement_judge.OnlineJudgeError)): dump(out/'judge-error-audit.json',exc.audit)

@@ -193,7 +193,7 @@ def main():
     p.add_argument('--dry-run', action='store_true')
     p.add_argument('--cache', type=Path, help='Directory for materialization and cached calibration')
     p.add_argument('--timeout-sec', '--total-timeout-sec', dest='timeout_sec', type=float,
-                   help='Override the total wall-clock limit for each selected task')
+                   help='Override agent/user interaction seconds; excludes preparation and final grading')
     args = p.parse_args()
     if args.workers < 1:
         p.error('--workers must be positive')
