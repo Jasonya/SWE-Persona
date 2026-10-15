@@ -77,6 +77,9 @@ class PersonaTerminalAgent(BaseAgent):
         # Harbor removes Compose-local tags at teardown. Keep the exact base
         # image available for the independent, post-teardown persona checker.
         await docker('tag', self.runtime_image, 'swe-persona-runtime:'+self.runtime_image.split(':',1)[1])
+        # Compose's down also untags each project image's first tag in sorted order, which is the tag above
+        # when the project name sorts after it; a second tag keeps the image in either order.
+        await docker('tag', self.runtime_image, 'swe-persona-runtime-pin:'+self.runtime_image.split(':',1)[1])
         self.checker_gpu_requests=main_info['HostConfig'].get('DeviceRequests') or []
         assert next(x for x in details if x['Id']==self.ids['main'])['State']['Running']
         if self.gpu_device is not None:
