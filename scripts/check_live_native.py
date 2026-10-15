@@ -48,7 +48,7 @@ def main():
         return 0 if all(r['passed'] for r in results) else 2
     args.output.mkdir(parents=True,exist_ok=True)
     row=selected[0];root=materialize(row,args.output/'input')
-    from swe_persona.swe_live import install_live
+    from swe_persona.swe_live import gold_preflight_seconds, install_live
     install_live(root,None,args.output)
     import docker
     from support import Manifest
@@ -63,7 +63,7 @@ def main():
         checks=[]
         for index in range(args.repetitions):
             attempt=args.output/f'repetition-{index+1:03d}'
-            ensure_gold(attempt,source,image.id,{'gold_seconds':row['budget']['verifier_timeout_sec']},False)
+            ensure_gold(attempt,source,image.id,{'gold_seconds':gold_preflight_seconds(row['budget']['verifier_timeout_sec'])},False)
             checks.append(native_preflight_report(attempt/'gold'/source['key']))
             write(args.output/'report.json',{'task_id':row['task_id'],'content_sha256':row['content_sha256'],
                 'image_id':image.id,'runtime_sha256':runtime_hash(),'model_calls':0,

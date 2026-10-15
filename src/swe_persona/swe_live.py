@@ -10,6 +10,23 @@ from .api import RoleAPI, role_name
 from .dataset import write
 
 PROFILE='swe-bench-live'
+# Reference compilation and tests are infrastructure. The interaction budget is
+# about 156–213 seconds and is too short for this check.
+GOLD_PREFLIGHT_FLOOR_SEC=300
+
+def gold_preflight_seconds(verifier_timeout_sec):
+    return max(GOLD_PREFLIGHT_FLOOR_SEC, float(verifier_timeout_sec))
+
+def live_episode_argv(task, row, config, episode_args):
+    argv=['--task',str(task/'tests/native-task.jsonl'),'--persona',row['persona']['persona_id'],
+        '--gold-dir',str(episode_args.gold_dir),'--binding-dir',str(task),'--model',config['agent']['model'],
+        '--sample-seconds',str(episode_args.sample_seconds)]
+    # The managed clock omits this deadline. Forwarding None becomes the string
+    # "None", which the episode parser rejects before the task starts.
+    if episode_args.deadline_monotonic is not None:
+        argv+=['--deadline-monotonic',str(episode_args.deadline_monotonic)]
+    argv+=['--output-dir',str(episode_args.output_dir)]
+    return argv
 
 def sha(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def adapter(root):return root/'runtime/project/scripts/swe_live_multilang/tb3_adapter'
@@ -134,10 +151,7 @@ def execute(root,row,config,out,mode,config_path=None,gate=None,episode_args=Non
         calibrate(out,config['judge']['model']);return 0
     if mode=='live-episode':
         from run import main as episode_main
-        return episode_main(['--task',str(task/'tests/native-task.jsonl'),'--persona',row['persona']['persona_id'],
-            '--gold-dir',str(episode_args.gold_dir),'--binding-dir',str(task),'--model',config['agent']['model'],
-            '--sample-seconds',str(episode_args.sample_seconds),'--deadline-monotonic',str(episode_args.deadline_monotonic),
-            '--output-dir',str(episode_args.output_dir)])
+        return episode_main(live_episode_argv(task, row, config, episode_args))
     # The shared CLI has already calibrated this exact profile/API/runtime fingerprint.
     from .cli import gate_allows_execution
     if gate is None or not gate_allows_execution(json.loads((gate/'gate.json').read_text())):
@@ -155,7 +169,7 @@ def execute(root,row,config,out,mode,config_path=None,gate=None,episode_args=Non
     client=docker.from_env(timeout=30)
     try:
         image,_=get_image(client,manifest)
-        if ensure_gold(out,source,image.id,{'gold_seconds':row['budget']['verifier_timeout_sec']},False) is None:
+        if ensure_gold(out,source,image.id,{'gold_seconds':gold_preflight_seconds(row['budget']['verifier_timeout_sec'])},False) is None:
             from .native_preflight import native_preflight_report
             diagnostic=native_preflight_report(out/'gold'/source['key'])
             write(out/'preflight-error.json',dict(diagnostic,
