@@ -1,12 +1,17 @@
 """A stopped benchmark session must not exhaust the shared Docker address pool."""
+import asyncio
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
-from swe_persona.harbor_bridge import remove_empty_session_network, cleanup_empty_session_networks
+from swe_persona.harbor_bridge import (align_egress_sidecar_platform,
+                                       cleanup_empty_session_networks,
+                                       remove_empty_session_network)
 
 
 class SessionNetworkCleanupTests(unittest.TestCase):
@@ -92,6 +97,40 @@ class SessionNetworkCleanupTests(unittest.TestCase):
                 else:
                     self.assertEqual(worker(temp, 'run', temp, time_limit={'effective_sec': 30}), -2)
                 cleanup.assert_called_once_with(temp)
+
+
+class SidecarPlatformTests(unittest.TestCase):
+    def setUp(self):
+        from harbor.environments.docker.docker import DockerEnvironment
+        self.environment = DockerEnvironment
+        self.original = DockerEnvironment._ensure_egress_control_sidecar_image_built
+        self.addCleanup(setattr, DockerEnvironment,
+                        '_ensure_egress_control_sidecar_image_built', self.original)
+
+    def test_compose_platform_is_used_for_the_sidecar_build(self):
+        with patch.dict(os.environ, {'DOCKER_DEFAULT_PLATFORM': 'linux/amd64'}):
+            self.assertTrue(align_egress_sidecar_platform())
+            aligned = self.environment._ensure_egress_control_sidecar_image_built
+            self.assertTrue(aligned._swe_persona_aligned)
+            self.assertTrue(align_egress_sidecar_platform())
+            self.assertIs(self.environment._ensure_egress_control_sidecar_image_built, aligned)
+            fake = SimpleNamespace(_env_vars=SimpleNamespace(), logger=None,
+                                   _EGRESS_CONTROL_SIDECAR_DOCKER_NAME='sidecar',
+                                   _EGRESS_CONTROL_SIDECAR_CONTEXT_PATH=Path('/context'))
+            fake._egress_control_sidecar_dockerfile_path = lambda: Path('/context/Dockerfile')
+            with patch('harbor.environments.docker.utils.ensure_docker_image_built',
+                       new=AsyncMock(return_value='sidecar:amd64')) as build:
+                asyncio.run(aligned(fake))
+            self.assertEqual(build.await_args.kwargs['platform'], 'linux/amd64')
+            self.assertEqual(fake._env_vars.egress_control_sidecar_image_name, 'sidecar:amd64')
+
+    def test_unset_or_unknown_platform_keeps_harbor_default(self):
+        for value in (None, 'linux/386'):
+            with self.subTest(value=value), patch.dict(os.environ, {}, clear=False):
+                os.environ.pop('DOCKER_DEFAULT_PLATFORM', None)
+                if value: os.environ['DOCKER_DEFAULT_PLATFORM'] = value
+                self.assertFalse(align_egress_sidecar_platform())
+                self.assertIs(self.environment._ensure_egress_control_sidecar_image_built, self.original)
 
 
 if __name__ == '__main__':

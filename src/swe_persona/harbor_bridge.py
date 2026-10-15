@@ -15,6 +15,40 @@ import warnings
 import yaml
 
 
+def align_egress_sidecar_platform():
+    """Build Harbor's egress sidecar for the platform Compose will request.
+
+    Compose applies ``DOCKER_DEFAULT_PLATFORM`` to every service, including the
+    sidecar. Harbor otherwise builds that image for the daemon architecture, so
+    an arm64 daemon with ``linux/amd64`` set refuses to start it.
+    """
+    if not re.fullmatch(r'linux/(?:amd64|arm64)', os.environ.get('DOCKER_DEFAULT_PLATFORM', '').strip()):
+        return False
+    from harbor.environments.docker.docker import DockerEnvironment
+    current = DockerEnvironment._ensure_egress_control_sidecar_image_built
+    if getattr(current, '_swe_persona_aligned', False):
+        return True
+    original = current
+
+    async def build_sidecar(self):
+        platform = os.environ.get('DOCKER_DEFAULT_PLATFORM', '').strip()
+        if not re.fullmatch(r'linux/(?:amd64|arm64)', platform):
+            return await original(self)
+        from harbor.environments.docker.utils import ensure_docker_image_built
+        self._env_vars.egress_control_sidecar_image_name = await ensure_docker_image_built(
+            docker_name=self._EGRESS_CONTROL_SIDECAR_DOCKER_NAME,
+            docker_build_context=self._EGRESS_CONTROL_SIDECAR_CONTEXT_PATH,
+            dockerfile_path=self._egress_control_sidecar_dockerfile_path(),
+            build_args={},
+            platform=platform,
+            logger=self.logger,
+        )
+
+    build_sidecar._swe_persona_aligned = True
+    DockerEnvironment._ensure_egress_control_sidecar_image_built = build_sidecar
+    return True
+
+
 def remove_empty_session_network(root, project, timeout_sec=10):
     """Reclaim only this bridge's stopped session, never prune shared Docker."""
     receipt = {"project": project, "removed": False, "errors": []}
