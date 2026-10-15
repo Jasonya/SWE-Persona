@@ -1,10 +1,12 @@
 """Provision the private Python grader without altering the agent environment."""
 import asyncio
 import hashlib
+import json
 import tempfile
 from pathlib import Path
 
 from terminal_agent import docker
+from checker_permissions import WRAPPERS
 
 RECIPE = '''ARG MAIN_IMAGE
 FROM ${MAIN_IMAGE}
@@ -19,6 +21,18 @@ PATCH_ROOTS = {
     'cumulative-layout-shift': '/app/barber-shop-site',
     'shadow-relay': '/app',
 }
+
+
+async def restore_checker_permissions(task_id, container):
+    """Apply the native grader's metadata repair after all artifact overlays."""
+    if task_id not in WRAPPERS:
+        return []
+    helper = Path(__file__).with_name('checker_permissions.py')
+    target = '/tmp/swe-persona-checker-permissions.py'
+    await docker('cp', str(helper), container + ':' + target)
+    # Metadata setup must not import candidate modules or sitecustomize.
+    output = await docker('exec', container, 'python3', '-I', '-S', target, task_id)
+    return json.loads(output)
 
 
 async def materialize_collected_patch(task_id, artifacts_dir, container):
