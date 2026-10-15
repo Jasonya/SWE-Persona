@@ -625,7 +625,8 @@ def main() -> int:
         json.dumps(rubric_config_payload, sort_keys=True, ensure_ascii=False).encode()
     ).hexdigest()
     run_slug = re.sub(r"[^a-z0-9_.-]+", "-", run_id.lower()).strip("-.")
-    run_hash = hashlib.sha256(run_id.encode()).hexdigest()[:10]
+    # Docker names are global per daemon and batches reuse a task's run id, so hash the run directory.
+    run_hash = hashlib.sha256(str(run_dir).encode()).hexdigest()[:10]
     controller = Controller(
         manifest=manifest,
         ledger=ledger,

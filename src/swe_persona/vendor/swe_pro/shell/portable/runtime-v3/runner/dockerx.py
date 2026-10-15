@@ -5,6 +5,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import os
+import random
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -20,6 +23,14 @@ def _run(cmd: List[str], timeout: float = 600.0, input_text: Optional[str] = Non
         stderr = exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
         marker = f"command timed out after {timeout:.1f} seconds"
         return 124, stdout, f"{stderr}\n{marker}".strip()
+
+
+def _cpuset(cpus: str) -> List[str]:
+    # --cpus is only a time quota, so the container still sees every host CPU; tools sized from the
+    # visible CPUs (pytest -n auto, nproc) then start one worker per host CPU inside the memory limit.
+    visible = sorted(os.sched_getaffinity(0))
+    chosen = random.sample(visible, min(len(visible), max(1, math.ceil(float(cpus)))))
+    return ["--cpuset-cpus", ",".join(map(str, sorted(chosen)))]
 
 
 @dataclass
@@ -56,7 +67,7 @@ class Container:
                 raise RuntimeError(f"could not remove stopped container {self.name}: {remove_err.strip()}")
         cmd = [
             "docker", "run", "-d", "--name", self.name,
-            "--memory", self.memory, "--cpus", self.cpus,
+            "--memory", self.memory, "--cpus", self.cpus, *_cpuset(self.cpus),
             "--network", self.network, "--entrypoint", "/bin/bash",
         ]
         for mount in self.mounts:
@@ -233,7 +244,7 @@ def run_ephemeral(
     timeout: float = 1800.0,
 ) -> Tuple[int, str, str]:
     cmd = [
-        "docker", "run", "--rm", "--memory", memory, "--cpus", cpus,
+        "docker", "run", "--rm", "--memory", memory, "--cpus", cpus, *_cpuset(cpus),
         "--network", network, "--entrypoint", "/bin/bash",
     ]
     for mount in mounts or []:
