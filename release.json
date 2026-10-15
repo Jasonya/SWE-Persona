@@ -25,7 +25,7 @@
     "swe-together": 4,
     "deep-swe": 28
   },
-  "runtime_sha256": "ddce64efa3a7d06a1b825183823e168d3e2f34b10c700cdf3dd595bebe7d545c",
+  "runtime_sha256": "99b75490df193a6c8431599617e4671a1d24e1fd1eb192c5da40ffb90eba7746",
   "scoring_entrypoint": "scripts/score.py",
   "evaluation_entrypoint": "swe-persona run",
   "batch_entrypoint": "scripts/evaluate.py",

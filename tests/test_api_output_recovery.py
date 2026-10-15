@@ -65,6 +65,54 @@ class PublicOutputTests(unittest.TestCase):
             api = RoleAPI(config,role,directory)
         return api,create,client
 
+    def tb3_call(self, api, role='agent'):
+        from swe_persona.worker import install_tb3
+        azure = ModuleType('azure_client')
+        loop = ModuleType('requirement_loop')
+        loop.POLICY = {}
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root/'row.json').write_text(json.dumps({'budget': {
+                'max_user_turns': 24, 'max_simulator_decisions': 64}}))
+            with patch.dict(sys.modules, {'azure_client': azure, 'requirement_loop': loop}), \
+                 patch.object(sys, 'path', list(sys.path)), \
+                 patch('swe_persona.worker.RoleAPI', return_value=api) as factory:
+                install_tb3(root, {'configured': True}, root)
+                result = azure.call(role, 'Return JSON', SCHEMA, root, timeout=30)
+                self.assertEqual(factory.call_args.args[1], api.role)
+                return result
+
+    def test_tb3_agent_uses_effort_budgets_instead_of_fixed_cap(self):
+        for effort, limit in ((None,65536),('none',8192),('low',16384),
+                              ('medium',65536),('high',65536),('xhigh',131072)):
+            with self.subTest(effort=effort):
+                options = {} if effort is None else {'reasoning_effort': effort}
+                api, create, _ = self.api([sdk_response()], options=options)
+                self.assertEqual(self.tb3_call(api, 'coding_agent'), {'ok': True})
+                self.assertEqual(create.call_args.kwargs['max_completion_tokens'], limit)
+
+    def test_tb3_agent_recovers_truncation_with_shared_budget_growth(self):
+        api, create, _ = self.api([sdk_response('', 'length'), sdk_response()])
+        self.assertEqual(self.tb3_call(api), {'ok': True})
+        self.assertEqual([c.kwargs['max_completion_tokens'] for c in create.call_args_list],
+                         [65536, 131072])
+
+    def test_tb3_configured_agent_limit_remains_a_hard_ceiling(self):
+        api, create, _ = self.api([sdk_response('', 'length'), sdk_response()],
+                                  options={'reasoning_effort': 'high', 'max_tokens': 32768})
+        self.assertEqual(self.tb3_call(api), {'ok': True})
+        self.assertEqual([c.kwargs['max_completion_tokens'] for c in create.call_args_list],
+                         [32768, 32768])
+
+    def test_tb3_non_agent_limits_are_preserved(self):
+        for role in ('user_simulator', 'judge'):
+            for options, expected in (({}, 16384), ({'max_output_tokens': 32768}, 32768)):
+                with self.subTest(role=role, options=options):
+                    api, create, _ = self.api([sdk_response(api='responses')],
+                        transport='responses', role=role, options=options)
+                    self.assertEqual(self.tb3_call(api, role), {'ok': True})
+                    self.assertEqual(create.call_args.kwargs['max_output_tokens'], expected)
+
     def test_all_truncation_causes_recover_before_format_repair(self):
         for transport in ('chat_completions','responses'):
             for reason in LENGTH_REASONS:

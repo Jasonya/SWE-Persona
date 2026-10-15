@@ -27,7 +27,10 @@ def install_tb3(root,config,out):
                 content=[{'type':'input_text','text':prompt}]
                 content += [{'type':'input_image','image_url':uri} for uri in (images or [])]
                 messages=[{'role':'user','content':content}] if images else [{'role':'user','content':prompt}]
-            return RoleAPI(config,chosen,audit_dir).json(messages,schema,max_tokens=16384,timeout=timeout)
+            # Agent calls use the shared effort budget and bounded growth policy.
+            # Keep the existing per-call fallback for simulator/judge roles.
+            limit=None if chosen=='agent' else 16384
+            return RoleAPI(config,chosen,audit_dir).json(messages,schema,max_tokens=limit,timeout=timeout)
         azure_client.call=call
     # Regenerate executable bindings after stripping construction-only fields.
     import requirement_loop

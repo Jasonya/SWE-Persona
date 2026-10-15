@@ -28,7 +28,8 @@ def configured_limit(options):
 
 
 def default_budget(effort):
-    return EFFORT_BUDGETS.get(str(effort).lower(), EFFORT_BUDGETS['medium'])
+    return EFFORT_BUDGETS.get(str(effort).lower() if effort is not None else '',
+                             EFFORT_BUDGETS['medium'])
 
 
 def is_truncated(reason):
