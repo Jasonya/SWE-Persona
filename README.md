@@ -158,6 +158,10 @@ The host controller:
 4. Repeats agent actions, user replies and profile-specific online checks until completion or a limit is reached. The coding model proposes actions; the harness executes them in the task environment.
 5. Collects the workspace and runs the protected native tests and persona grading. The normalized result and detailed evidence are written to the output directory.
 
+For TB3 `risk-scorer-replay`, private persona grading restores the shipped `/app/rebuild_parity_report.sh` to mode `0555` after copying the frozen artifacts, matching the native verifier's setup. Restoration requires the original regular file and checksum; missing, replaced or symlinked files remain for the existing checker to assess. The private copy's permission changes are recorded in `persona-check.json` under `checker_permission_restorations`; source contents and host artifacts are preserved. This runtime change requires fresh calibration for new scored attempts, with historical results retained separately.
+
+Its persona checker also stops observing a CLI call when a manifest-selected source is not a regular file, such as a directory in place of a CSV, as it already does for an unreadable thresholds file, instead of recording the resulting `IsADirectoryError` as incomplete observation. This corrects the task row, so its `content_sha256` changes.
+
 ### Agent harnesses
 
 The selected row's `interaction.profile_id` chooses the scaffold automatically. Public profile names use benchmark names; SWE-bench Pro adds `mini` or `shell` to distinguish its two agent scaffolds. The `source_subset` field uses the same names:

@@ -9,7 +9,7 @@ from harbor.models.trial.config import TrialConfig
 from harbor.trial.trial import Trial
 from harbor.trial.artifact_handler import artifact_host_path
 from terminal_agent import docker, PersonaTerminalAgent
-from checker_runtime import ensure_checker_python, materialize_collected_patch
+from checker_runtime import ensure_checker_python, materialize_collected_patch, restore_checker_permissions
 
 def tree_index(root):
     result={}
@@ -111,6 +111,9 @@ async def check_artifacts(task_id, artifacts_dir, binding, checker_path, output=
             if entry.is_dir():
                 await docker('exec',cid,'mkdir','-p','/'+entry.name)
                 await docker('cp',str(entry)+'/.',cid+':/'+entry.name+'/')
+        restorations = await restore_checker_permissions(task_id, cid)
+        if restorations:
+            result['checker_permission_restorations'] = restorations
         await docker('cp',str(checker_path),cid+':/tmp/persona_checker.py')
         version=await docker('exec',cid,'python3','--version');result['python_version']=version.strip()
         command="import importlib.util,json; s=importlib.util.spec_from_file_location('c','/tmp/persona_checker.py'); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); print('PERSONA_CHECK_RESULT='+json.dumps(m.check()))"
