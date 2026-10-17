@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import ssl
 from pathlib import Path
 import sys
 import tempfile
@@ -27,6 +28,69 @@ def load(name, path):
 
 
 class RecoveryTests(unittest.TestCase):
+    def test_ssl_disconnect_recovers_directly_and_through_wrappers(self):
+        for kind in (ssl.SSLEOFError, ssl.SSLZeroReturnError):
+            for wrapper in ('direct', 'urllib', 'cause'):
+                with self.subTest(kind=kind.__name__, wrapper=wrapper):
+                    error = kind(8, 'TLS connection closed')
+                    if wrapper == 'urllib':
+                        error = urllib.error.URLError(error)
+                    elif wrapper == 'cause':
+                        outer = RuntimeError('connection wrapper')
+                        outer.__cause__ = error
+                        error = outer
+                    operation = Mock(side_effect=[error, 'response'])
+                    records = []
+                    with patch('swe_persona.api_recovery.time.sleep'):
+                        self.assertEqual(retry_transport(operation, request_timeout=10,
+                                                        audit=records.append), 'response')
+                    self.assertEqual(operation.call_count, 2)
+                    self.assertEqual([r['status'] for r in records], ['retrying', 'recovered'])
+
+    def test_certificate_and_unknown_ssl_errors_fail_without_retry(self):
+        for kind in (ssl.SSLCertVerificationError, ssl.SSLError):
+            for wrapped in (False, True):
+                with self.subTest(kind=kind.__name__, wrapped=wrapped):
+                    error = kind(1, 'TLS configuration or certificate failure')
+                    if wrapped:
+                        error = urllib.error.URLError(error)
+                    operation = Mock(side_effect=error)
+                    with patch('swe_persona.api_recovery.time.sleep') as sleep:
+                        with self.assertRaises(type(error)):
+                            retry_transport(operation, request_timeout=10)
+                    self.assertEqual(operation.call_count, 1)
+                    sleep.assert_not_called()
+
+    def test_ssl_disconnect_exhaustion_is_bounded(self):
+        operation = Mock(side_effect=ssl.SSLEOFError(8, 'TLS connection closed'))
+        with patch('swe_persona.api_recovery.time.sleep'), self.assertRaises(APITransportExhausted) as caught:
+            retry_transport(operation, request_timeout=10)
+        self.assertEqual(operation.call_count, 3)
+        self.assertTrue(is_api_interruption(caught.exception))
+
+    def test_generic_ssl_unexpected_eof_reason_is_retryable(self):
+        error = ssl.SSLError(1, 'TLS error')
+        error.reason = 'UNEXPECTED_EOF_WHILE_READING'
+        operation = Mock(side_effect=[error, 'response'])
+        with patch('swe_persona.api_recovery.time.sleep'):
+            self.assertEqual(retry_transport(operation, request_timeout=10), 'response')
+
+    def test_ssl_recovery_respects_episode_deadline(self):
+        clock = SimpleNamespace(now=0.0)
+        timeouts = []
+        def operation(seconds):
+            timeouts.append(seconds)
+            clock.now += seconds
+            raise ssl.SSLEOFError(8, 'TLS connection closed')
+        def sleep(seconds):
+            clock.now += seconds
+        with patch('swe_persona.api_recovery.time.monotonic', side_effect=lambda: clock.now), \
+             patch('swe_persona.api_recovery.time.sleep', side_effect=sleep), \
+             self.assertRaises(APITransportExhausted):
+            retry_transport(operation, request_timeout=3, deadline=5)
+        self.assertEqual(timeouts, [3, 1])
+        self.assertEqual(clock.now, 5)
+
     def test_transient_timeout_then_success(self):
         operation = Mock(side_effect=[TimeoutError(), 'response'])
         records = []

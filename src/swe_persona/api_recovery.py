@@ -1,5 +1,6 @@
 """Bounded API transport recovery and evidence-based interrupted-run scoring."""
 import json
+import ssl
 from pathlib import Path
 import time
 import urllib.error
@@ -20,6 +21,18 @@ class APITransportExhausted(RuntimeError):
 
 
 def is_transport_error(error):
+    # urllib may wrap a handshake error, while response reads can raise the SSL
+    # exception directly. SDK connection errors may wrap it via __cause__.
+    current, seen = error, set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ssl.SSLError):
+            if isinstance(current, ssl.SSLCertVerificationError):
+                return False
+            return isinstance(current, (ssl.SSLEOFError, ssl.SSLZeroReturnError)) or (
+                getattr(current, 'reason', None) == 'UNEXPECTED_EOF_WHILE_READING')
+        current = (current.reason if isinstance(current, urllib.error.URLError)
+                   and isinstance(current.reason, BaseException) else current.__cause__)
     if isinstance(error, (APIConnectionError, InternalServerError, RateLimitError, urllib.error.URLError)):
         if isinstance(error, urllib.error.HTTPError):
             return error.code in (408, 429) or error.code >= 500
