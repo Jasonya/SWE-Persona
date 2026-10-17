@@ -105,7 +105,7 @@ Examples are validated against the current response schema and use current allow
 
 The JSON action agents for DeepSWE, SWE-Together and Terminal-Bench 3 use `coding-agent-json-envelope-v1`. Their system prompts start with an explicit response protocol and a section for each action field. All required fields must be present; key order is unrestricted. User-facing plans, questions and handoffs belong inside the designated JSON string. Examples are checked against each runtime's existing action schema, contain no task-specific file names or feature requests, and cannot introduce permissions or an additional approval step. Completion actions remain claims for user/controller review, not declarations that native or persona grading passed.
 
-Rejected actions execute nothing. DeepSWE's protocol repair keeps the same schema, output budget and deadline, and identifies its feedback as host transport feedback rather than a user request. Scope and command-approval controls remain enforced by the existing controllers. Prompt changes require a fresh runtime fingerprint and calibration for new scored attempts.
+Rejected actions execute nothing. DeepSWE's protocol repair keeps the same schema, output budget and deadline, and identifies its feedback as host transport feedback rather than a user request. A DeepSWE shell action whose content holds a NUL character (U+0000) is rejected the same way, because no command line can carry it; this runtime change requires fresh calibration for new scored attempts. Scope and command-approval controls remain enforced by the existing controllers. Prompt changes require a fresh runtime fingerprint and calibration for new scored attempts.
 
 ## 3. Check the dataset before making API calls
 
